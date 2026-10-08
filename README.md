@@ -1,12 +1,13 @@
-# VanikGPT prototype preview
+# Vanik Edge prototype preview
 
-A click-through preview of VanikGPT as an app inside Vanik OS.
+A click-through preview of the Vanik OS console, VanikGPT and five more apps: Document processing, Vanik Desk, Vanik Echo, Vanik Scout and Vanik MeasureBook.
 
 - Everything runs in your browser. The server is a service worker and data is kept in this browser only.
-- It opens on a sample workspace: three knowledge collections, four agents, four finished chats, workflow runs, an API key, a webhook, a watched folder and an ERP tool connector.
-- No model is connected. The sample chats show written answers; new questions are answered straight from the documents and say so.
-- The Browser and Computer plugins drive a sample supplier portal (https://supplier-portal.example) that is drawn, not fetched. Open a run's picture to replay it step by step.
-- The folder, ERP and webhook addresses that start with `sample://` are stand-ins that behave like the real thing.
+- It opens on a sample workspace: five people, three knowledge collections, four agents, finished chats, workflow runs, and sample content in each app.
+- No model is connected. Sample chats show written answers; new questions are answered straight from the documents and say so. The five other apps work by plain rules.
+- MeasureBook does not read a drawing and Echo does not listen to a meeting. Their sample content is stored, and new content is typed or pasted.
+- The supplier portal, shared folder, ERP and webhook are stand-ins that behave like the real thing.
+- Appliance pages such as network, updates and monitoring record what you do but change no device.
 - To start again, clear this site's data in the browser.
 
-Start: pick the owner account, then open VanikGPT and the chats on the left.
+Start: pick the owner account. Vanik OS opens on Home; the apps are under Apps.
