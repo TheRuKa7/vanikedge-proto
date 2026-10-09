@@ -1,4 +1,5 @@
 // Vanik OS console pages that VanikGPT touches: Apps, the VanikGPT manage page, Knowledge base, Model Hub, People, Settings.
+import { hint } from './hints.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
 
 const NAV = [['home', 'Home', 'home'], ['apps', 'Apps', 'apps'], ['knowledge', 'Knowledge', 'library_books'], ['models', 'Models', 'memory'], ['people', 'People', 'group'], ['activity', 'Activity', 'insights'], ['devices', 'Appliance', 'dns']];
@@ -24,11 +25,11 @@ export function osShell(active, crumb, content) {
   const place = hash === '#/os/access/evidence' ? 'activity' : hash === '#/os/connectors/systems' ? 'apps' : /^#\/os\/(help|notifications)/.test(hash) ? '' : PLACE[active] || 'home', tabs = TABS[place], on = tabs && tabs.find(t => t[0] === hash);
   const installed = (B.app.status === 'not_installed' ? 0 : 1) + ((B.suite || { apps: [] }).apps.filter(x => x.status !== 'not_installed').length);
   return `<div class="shell"><aside class="console-nav">
-    <a class="brand" href="#/os/home">${LOGO}<span>VANIK <em>OS</em></span></a>
+    <a class="brand" href="#/os/home">${LOGO}<span class="vk-brand"><small>Vanik Edge</small><b>Console</b></span></a>
     <button class="nav-search" data-act="palette">${icon('search')}Search everything<kbd>Ctrl K</kbd></button>
     ${NAV.map(n => `<a class="nav-item ${place === n[0] ? 'is-active' : ''}" href="#/os/${n[0]}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'apps' ? `<span class="count">${installed}</span>` : ''}</a>`).join('')}
     <span class="grow"></span><a class="nav-item" href="#/me">${icon('person')}<span>My apps</span></a><a class="nav-item ${hash === '#/os/help' ? 'is-active' : ''}" href="#/os/help">${icon('help_outline')}<span>Help</span></a>
-  </aside><div class="main"><header class="topbar">${navToggle()}<span class="crumb">${esc(B.tenant.name)} / <b>${crumb}</b></span><span class="right"></span>
+  </aside><div class="main"><header class="topbar">${navToggle()}<span class="crumb">${esc(B.tenant.name)} / <b>${crumb}</b></span>${hint({ apps: 'console-apps', people: 'console-access', knowledge: 'console-knowledge' }[PLACE[active] || active] || '')}<span class="right"></span>
     <span class="pill ${B.device.online ? '' : 'off'} tip-down" data-tip="${B.device.online ? 'Reaching ' + esc(B.device.name) : 'The appliance is offline. Apps and models are stopped.'}"><i></i>Vanik Appliance ${B.device.online ? 'online' : 'offline'}</span>
     <button class="icon-btn bordered tip-down bell" data-act="notif" data-tip="Notifications" aria-label="Notifications">${icon('notifications_none')}${B.attention.length ? '<i></i>' : ''}</button>${themeButton()}${userButton()}</header>
     ${on ? `<nav class="subnav">${tabs.map(t => `<a class="${t === on ? 'on' : ''}" href="${t[0]}">${t[1]}</a>`).join('')}</nav>` : ''}

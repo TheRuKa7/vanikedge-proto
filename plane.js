@@ -223,7 +223,7 @@ export function planeOsPage(parts) {
 const ME = [['', 'My apps', 'apps'], ['documents', 'My documents', 'library_books'], ['keys', 'My keys', 'key'], ['help', 'Help', 'help_outline']];
 function meShell(active, content) {
   const B = S.boot;
-  return `<div class="shell"><aside class="console-nav"><a class="brand" href="#/me">${LOGO}<span>VANIK</span></a>
+  return `<div class="shell"><aside class="console-nav"><a class="brand" href="#/me">${LOGO}<span class="vk-brand"><small>Vanik Edge</small><b>My apps</b></span></a>
     ${ME.map(m => `<a class="nav-item ${active === m[0] ? 'is-active' : ''}" href="#/me${m[0] ? '/' + m[0] : ''}">${icon(m[2])}<span>${m[1]}</span></a>`).join('')}
     ${B.admin ? `<span class="nav-group-label">Admin</span><a class="nav-item" href="#/os/home">${icon('dns')}<span>Vanik OS console</span></a>` : ''}</aside>
     <div class="main"><header class="topbar">${navToggle()}<span class="crumb">${esc(B.tenant.name)} / <b>${ME.find(m => m[0] === active)[1]}</b></span><span class="right"></span>${themeButton()}${userButton()}</header><div class="scroll" id="scroll"><div class="page">${content}</div></div></div></div>`;

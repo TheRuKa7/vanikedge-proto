@@ -1,0 +1,121 @@
+/* Vanik UI 1.0: a small neo-minimal library. Ink on paper, one accent, hairlines, quiet motion.
+   No build step and no dependencies. Link this file, use the classes. Docs: DESIGN_LANGUAGE.md */
+
+/* ---------- 1. Tokens ---------- */
+:root {
+  /* paper and ink */
+  --vnk-bg: #fafaf8; --vnk-surface: #ffffff; --vnk-surface-2: #f3f3f0; --vnk-border: #e7e7e2; --vnk-border-2: #d3d3cd;
+  --vnk-ink: #0c0d0d; --vnk-ink-2: #55574f; --vnk-ink-3: #8d8e86;
+  /* the one accent, and the action colour (ink) */
+  --vnk-brand: #1fa350; --vnk-accent: #141616; --vnk-accent-weak: #eeeeea; --vnk-accent-fg: #ffffff; --vnk-mark: #fff3c4;
+  /* states, used only for state */
+  --vnk-ok: #2e6b4f; --vnk-ok-bg: #e8f1ec; --vnk-warn: #8a6318; --vnk-warn-bg: #fbf1dd; --vnk-err: #a32b1e; --vnk-err-bg: #f8e7e3; --vnk-idle: #7e7f79; --vnk-idle-bg: #f0f0ed;
+  /* depth: none at rest, one soft lift for things that float */
+  --vnk-shadow: none; --vnk-pop: 0 18px 50px -22px rgba(12, 13, 13, .38), 0 0 0 1px var(--vnk-border);
+  /* type, space, shape, motion */
+  --sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --vk-1: 4px; --vk-2: 8px; --vk-3: 12px; --vk-4: 16px; --vk-5: 24px; --vk-6: 32px; --vk-7: 48px;
+  --vk-r-s: 6px; --vk-r: 10px; --vk-r-l: 14px;
+  --vk-fast: 120ms; --vk-base: 200ms; --vk-step: 1700ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--vnk-brand) 28%, transparent);
+}
+:root[data-theme="dark"] {
+  --vnk-bg: #0e0f10; --vnk-surface: #151718; --vnk-surface-2: #1d1f21; --vnk-border: #282b2d; --vnk-border-2: #3a3e41;
+  --vnk-ink: #f2f3f1; --vnk-ink-2: #b2b5b0; --vnk-ink-3: #858883; --vnk-accent: #f2f3f1; --vnk-accent-weak: #25272a; --vnk-accent-fg: #0c0d0d; --vnk-mark: #4a3d10;
+  --vnk-ok: #6fcfa1; --vnk-ok-bg: #14291f; --vnk-warn: #e0a85a; --vnk-warn-bg: #2e2413; --vnk-err: #f58e7f; --vnk-err-bg: #3a1f1a; --vnk-idle: #858883; --vnk-idle-bg: #202325;
+  --vnk-pop: 0 18px 50px -20px rgba(0, 0, 0, .9), 0 0 0 1px var(--vnk-border);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --vnk-bg: #0e0f10; --vnk-surface: #151718; --vnk-surface-2: #1d1f21; --vnk-border: #282b2d; --vnk-border-2: #3a3e41;
+    --vnk-ink: #f2f3f1; --vnk-ink-2: #b2b5b0; --vnk-ink-3: #858883; --vnk-accent: #f2f3f1; --vnk-accent-weak: #25272a; --vnk-accent-fg: #0c0d0d; --vnk-mark: #4a3d10;
+    --vnk-ok: #6fcfa1; --vnk-ok-bg: #14291f; --vnk-warn: #e0a85a; --vnk-warn-bg: #2e2413; --vnk-err: #f58e7f; --vnk-err-bg: #3a1f1a; --vnk-idle: #858883; --vnk-idle-bg: #202325;
+    --vnk-pop: 0 18px 50px -20px rgba(0, 0, 0, .9), 0 0 0 1px var(--vnk-border);
+  }
+}
+
+/* ---------- 2. Base and type ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--vnk-bg); color: var(--vnk-ink); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+h1 { font-size: 28px; line-height: 1.1; letter-spacing: -.02em; font-weight: 700; margin: 0; }
+h2 { font-size: 20px; line-height: 1.2; letter-spacing: -.01em; font-weight: 700; margin: 0; }
+h3 { font-size: 15px; line-height: 1.3; font-weight: 600; margin: 0; }
+p { margin: 0; }
+.sub, .muted { color: var(--vnk-ink-2); } .faint { color: var(--vnk-ink-3); } .small { font-size: 12.5px; } .mono { font-family: var(--mono); font-size: 12px; }
+.cap { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--vnk-ink-3); }
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--vk-r-s); }
+
+/* ---------- 3. Layout helpers ---------- */
+.row { display: flex; align-items: center; gap: var(--vk-2); } .row.wrap { flex-wrap: wrap; } .stack { display: flex; flex-direction: column; } .grow { flex: 1; min-width: 0; }
+.grid { display: grid; gap: var(--vk-4); }
+
+/* ---------- 4. Actions ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--vnk-accent); color: var(--vnk-accent-fg); white-space: nowrap; transition: transform var(--vk-fast) var(--ease), background-color var(--vk-fast), opacity var(--vk-fast); box-shadow: none; }
+.btn:hover { transform: translateY(-1px); box-shadow: none; } .btn:active { transform: scale(.98); } .btn:disabled { opacity: .4; cursor: default; transform: none; }
+.btn.ghost { background: transparent; color: var(--vnk-ink); border: 1px solid var(--vnk-border-2); } .btn.ghost:hover { background: var(--vnk-surface-2); transform: none; }
+.btn.ghost.on { border-color: var(--vnk-ink); background: var(--vnk-accent-weak); color: var(--vnk-ink); }
+.btn.text { background: none; color: var(--vnk-ink); padding: 0 8px; } .btn.text:hover { background: var(--vnk-surface-2); transform: none; }
+.btn.danger { background: var(--vnk-err); color: #fff; } .btn.lg { height: 40px; padding: 0 20px; font-size: 13.5px; }
+.icon-btn { width: 34px; height: 34px; border-radius: 50%; display: inline-grid; place-items: center; color: var(--vnk-ink-2); flex: none; transition: background-color var(--vk-fast); }
+.icon-btn:hover { background: var(--vnk-surface-2); color: var(--vnk-ink); } .icon-btn.sm { width: 28px; height: 28px; }
+
+/* ---------- 5. Inputs ---------- */
+.input, select.input, textarea.input { width: 100%; height: 38px; border: 1px solid var(--vnk-border-2); border-radius: var(--vk-r); padding: 0 12px; background: var(--vnk-surface); font-size: 13.5px; transition: border-color var(--vk-fast), box-shadow var(--vk-fast); }
+textarea.input { height: auto; padding: 10px 12px; line-height: 1.5; resize: vertical; } .input:focus { outline: none; border-color: var(--vnk-ink); box-shadow: var(--ring); }
+.field { display: flex; flex-direction: column; gap: 6px; } .field > span { font-size: 12px; font-weight: 600; color: var(--vnk-ink-2); }
+.switch { width: 38px; height: 22px; border-radius: 999px; background: var(--vnk-border-2); position: relative; flex: none; transition: background-color var(--vk-base) var(--ease); }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--vk-base) var(--ease); }
+.switch.on { background: var(--vnk-brand); } .switch.on::after { transform: translateX(16px); }
+.seg { display: inline-flex; border: 1px solid var(--vnk-border-2); border-radius: 999px; padding: 3px; gap: 2px; background: var(--vnk-surface); max-width: 100%; overflow-x: auto; }
+.seg button { padding: 5px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--vnk-ink-2); white-space: nowrap; } .seg button.on { background: var(--vnk-accent); color: var(--vnk-accent-fg); }
+/* a filter you can turn on and off: it shows a tick when on, so it never reads as a label */
+.toggle { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--vnk-border-2); font-size: 12.5px; font-weight: 600; color: var(--vnk-ink-2); transition: all var(--vk-fast); }
+.toggle::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--vnk-border-2); transition: all var(--vk-fast); }
+.toggle:hover { color: var(--vnk-ink); border-color: var(--vnk-ink-3); } .toggle.on { border-color: var(--vnk-ink); color: var(--vnk-ink); background: var(--vnk-accent-weak); }
+.toggle.on::before { border-color: var(--vnk-brand); background: var(--vnk-brand); box-shadow: inset 0 0 0 2px var(--vnk-accent-weak); }
+
+/* ---------- 6. Labels ---------- */
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; line-height: 18px; background: var(--vnk-idle-bg); color: var(--vnk-idle); white-space: nowrap; }
+.chip > i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; } .chip.ok { background: var(--vnk-ok-bg); color: var(--vnk-ok); } .chip.warn { background: var(--vnk-warn-bg); color: var(--vnk-warn); } .chip.err { background: var(--vnk-err-bg); color: var(--vnk-err); }
+.tag { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--vnk-border); border-radius: 7px; padding: 2px 8px; font-size: 12px; color: var(--vnk-ink-2); background: var(--vnk-surface); }
+.tag.on { background: var(--vnk-accent); border-color: var(--vnk-accent); color: var(--vnk-accent-fg); }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--vnk-accent); color: var(--vnk-accent-fg); display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; flex: none; }
+
+/* ---------- 7. Surfaces ---------- */
+.card { background: var(--vnk-surface); border: 1px solid var(--vnk-border); border-radius: var(--vk-r-l); box-shadow: none; padding: 20px; }
+.card .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; } .card.next { border-color: var(--vnk-brand); }
+.set-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--vnk-border); } .set-row:first-child { border-top: 0; padding-top: 0; } .set-row:last-child { padding-bottom: 0; }
+.set-row .lbl { font-weight: 600; }
+.banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--vk-r); background: var(--vnk-warn-bg); color: var(--vnk-warn); font-weight: 500; font-size: 13px; }
+.empty { text-align: center; padding: 44px 20px; color: var(--vnk-ink-2); border: 1px dashed var(--vnk-border-2); border-radius: var(--vk-r-l); background: transparent; }
+table.list { width: 100%; border-collapse: collapse; } table.list th { text-align: left; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--vnk-ink-3); padding: 10px 12px; }
+table.list td { padding: 12px; border-top: 1px solid var(--vnk-border); vertical-align: middle; } table.list tr.sel td, table.list tr:hover td { background: color-mix(in srgb, var(--vnk-surface-2) 60%, transparent); }
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--vnk-border); margin-bottom: 24px; overflow-x: auto; }
+.tabs a { padding: 10px 0; font-weight: 600; color: var(--vnk-ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; transition: color var(--vk-fast); } .tabs a:hover { color: var(--vnk-ink); } .tabs a.on { color: var(--vnk-ink); border-color: var(--vnk-ink); }
+.page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; } .page-head .sub { margin-top: 8px; }
+
+/* ---------- 8. The family mark: "Vanik Edge", then the product ---------- */
+.vk-brand { display: flex; flex-direction: column; line-height: 1.1; } .vk-brand small { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--vnk-ink-3); }
+.vk-brand b { font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+
+/* ---------- 9. Hints: a small moving picture that explains one thing ---------- */
+.vk-hint { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; border: 1px solid var(--vnk-border-2); color: var(--vnk-ink-2); font: 700 11px var(--sans); position: relative; flex: none; vertical-align: middle; background: var(--vnk-surface); transition: all var(--vk-fast); }
+.vk-hint::before { content: "?"; } .vk-hint:hover, .vk-hint[aria-expanded="true"] { border-color: var(--vnk-ink); color: var(--vnk-ink); }
+.vk-hint.is-new::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid var(--vnk-brand); animation: vk-ping 2.2s var(--ease) infinite; }
+.vk-pop { position: fixed; z-index: 95; width: min(340px, calc(100vw - 24px)); background: var(--vnk-surface); border-radius: var(--vk-r-l); box-shadow: var(--vnk-pop); padding: 18px; animation: vk-rise var(--vk-base) var(--ease) both; }
+.vk-pop h4 { margin: 0 0 14px; font-size: 14px; font-weight: 700; } .vk-pop .vk-text { min-height: 60px; font-size: 13px; color: var(--vnk-ink-2); margin-top: 14px; }
+.vk-pop .vk-text b { display: block; color: var(--vnk-ink); margin-bottom: 2px; } .vk-pop .vk-foot { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.vk-pop .vk-pip { width: 6px; height: 6px; border-radius: 50%; background: var(--vnk-border-2); transition: all var(--vk-base); } .vk-pop .vk-pip.on { background: var(--vnk-ink); width: 16px; border-radius: 3px; }
+.vk-flow { display: flex; align-items: center; position: relative; padding: 4px 0; }
+.vk-flow::before { content: ""; position: absolute; left: 18px; right: 18px; top: 50%; height: 1px; background: var(--vnk-border-2); }
+.vk-flow .vk-run { position: absolute; left: 18px; top: 50%; height: 2px; margin-top: -1px; background: var(--vnk-brand); width: calc((100% - 36px) * var(--p, 0)); transition: width var(--vk-step) linear; }
+.vk-flow { justify-content: space-between; } .vk-node { flex: 0 0 36px; display: grid; place-items: center; position: relative; z-index: 1; cursor: pointer; }
+.vk-node > span { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--vnk-surface); border: 1px solid var(--vnk-border-2); color: var(--vnk-ink-3); font: 700 12px var(--sans); transition: all var(--vk-base) var(--ease); }
+.vk-node.done > span { border-color: var(--vnk-brand); color: var(--vnk-brand); } .vk-node.on > span { background: var(--vnk-ink); border-color: var(--vnk-ink); color: var(--vnk-bg); transform: scale(1.14); }
+.vk-node > span .mi { font-size: 17px; }
+@keyframes vk-ping { 0% { transform: scale(.8); opacity: .9; } 70%, 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes vk-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } .vk-hint.is-new::after { display: none; } }

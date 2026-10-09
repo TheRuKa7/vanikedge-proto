@@ -61,6 +61,7 @@ const MO = { memoryFor: () => [] };
 const PA = { flags: () => ({}) };
 const PL = { keyGate: () => null, sample() {} };
 const RL = { sample() {} };
+const SN = { sample() {}, fromTranscript: () => '' };
 const SU = { usedGb: () => 0, boot: () => null, sample() {}, canUse: () => false, apps: () => [] };
 const ED = { outsideOn: () => [], isOutside: () => false, callLimit: () => 10, sendsDocs: () => false, askOutside: async () => {} };
 const SYSTEM = { id: 'system', name: 'Vanik OS', role: 'owner', teams: [] };
@@ -834,7 +835,8 @@ Object.assign(WK, require('./work')({ db, on, err, uid, now, audit, isAdmin, A, 
 Object.assign(MO, require('./more')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, call: (...a) => call(...a), ask: (u, c, body) => answer(u, c, body, () => {}, quiet) }));
 Object.assign(PA, require('./parity')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt }));
 Object.assign(SU, require('./suite')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, cleanAccess, search, DEMO, freeGb, addDocument, canWrite: (u, c) => WK.canWrite(u, c), call: (...a) => call(...a), issueKey: (...a) => FX.issueKey(...a), revokeSystemKeys: n => FX.revokeSystemKeys(n) }));
-Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
+Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id), toSense: (...a) => SN.fromTranscript(...a) }));
+Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
 Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
 Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, probes, issueKey: (...a) => FX.issueKey(...a) }));
 
@@ -845,7 +847,7 @@ let ready = Promise.resolve();
 if (DEMO && !db.sample) ready = require('./sample').seed({ db, call, audit, uid, ask: (u, c, body, script) => answer(u, c, body, () => {}, quiet, script), attach: (u, c, b) => addDocument(u, 'chat:' + c.id, b),
   fastDeploy: () => { const d = db.app.deploys[0]; if (d && !d.result) { d.t0 = new Date(Date.now() - 120000).toISOString(); tick(); } } }).then(save, e => { console.error('Sample workspace:', e); });
 
-ready = ready.then(() => { if (DEMO && db.sample) { SU.sample(); RL.sample(); PL.sample(); save(); } }); // the other five apps and their sample content
+ready = ready.then(() => { if (DEMO && db.sample) { SU.sample(); RL.sample(); SN.sample(); PL.sample(); save(); } }); // the other five apps and their sample content
 
 // ---------- http
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon' };

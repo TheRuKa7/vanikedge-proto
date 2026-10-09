@@ -16,7 +16,7 @@ let accounts = null, lastHash = '', busy = false, again = false;
 const home = () => (S.boot.admin ? '#/os/home' : '#/me');
 
 function signinPage() {
-  return `<div class="center-page"><div class="card"><div class="brand" style="padding:0 0 18px">${LOGO}<span>VANIK <em>OS</em></span></div>
+  return `<div class="center-page"><div class="card"><div class="brand" style="padding:0 0 18px">${LOGO}<span class="vk-brand"><small>Vanik Edge</small><b>Sign in</b></span></div>
     <h2>Sign in</h2><p class="muted" style="margin:6px 0 18px">Pick an account. On your appliance this is your company single sign-on.</p>
     <div class="stack" style="gap:8px">${accounts.map(a => `<button class="acct" data-act="signin" data-id="${a.id}"><span class="avatar">${esc(initials(a.name))}</span><span class="grow"><b>${esc(a.name)}</b><br><span class="small muted">${esc(a.email)}</span></span>${a.status === 'invited' ? chip('Invited', 'warn') : ''}${chip(ROLE[a.role], 'line', false)}</button>`).join('')}</div></div></div>`;
 }

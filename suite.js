@@ -2,7 +2,9 @@
 // the plan, the evidence pack. As apps of their own at #/app/...: Document processing, Desk, Echo, Scout and MeasureBook.
 import { S, $, esc, icon, info, chip, go, ago, when, api, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, navToggle, downloadText, accessPicker, accessDrafts, accessLabel, extractFile, pickFiles, themeButton, userButton, LOGO } from './core.js';
 import { osShell } from './os.js';
-import { scoutPage, mbPage, mbotPage, echoPage } from './real.js';
+import { scoutPage, mbPage, echoPage } from './real.js';
+import { sensePage } from './sense.js';
+import { hint } from './hints.js';
 
 const X = { s: null, key: '', ev: null, evKey: '' }, P = {};
 export const suiteRouteChanged = () => { X.key = ''; X.evKey = ''; Object.keys(P).forEach(k => { if (k.endsWith('Key')) P[k] = ''; }); };
@@ -131,10 +133,10 @@ export function suiteDecorate(parts, html) {
 // ================= the apps =================
 function appShell(id, crumb, content) {
   const B = S.boot, apps = B.suite.apps.filter(a => a.canUse), me = B.suite.apps.find(a => a.id === id) || {};
-  return `<div class="shell"><aside class="console-nav"><a class="brand" href="#/app/${id}">${LOGO}<span>VANIK <em>${esc((me.name || '').replace(/^Vanik /, '').split(' ')[0].toUpperCase())}</em></span></a>
+  return `<div class="shell"><aside class="console-nav"><a class="brand" href="#/app/${id}">${LOGO}<span class="vk-brand"><small>Vanik Edge</small><b>${esc((me.name || '').replace(/^Vanik /, ''))}</b></span></a>
     <span class="nav-group-label">Apps</span>${B.canUseGpt ? `<a class="nav-item" href="#/gpt">${icon('forum')}<span>VanikGPT</span></a>` : ''}${apps.map(a => `<a class="nav-item ${a.id === id ? 'is-active' : ''}" href="#/app/${a.id}">${icon(a.icon)}<span>${esc(a.name)}</span></a>`).join('')}
     ${B.admin ? `<span class="nav-group-label">Admin</span><a class="nav-item" href="#/os/apps/${id}">${icon('tune')}<span>Manage in Vanik OS</span></a>` : ''}</aside>
-    <div class="main"><header class="topbar">${navToggle()}<span class="crumb">${crumb}</span><span class="right"></span>${me.role ? `<span class="chip" data-tip="Your role in ${esc(me.name)}. An admin sets it in Vanik OS.">${esc(me.role)}</span>` : ''}${themeButton()}${userButton()}</header><div class="scroll" id="scroll"><div class="page">${content}</div></div></div></div>`;
+    <div class="main"><header class="topbar">${navToggle()}<span class="crumb">${crumb}</span>${hint(id)}<span class="right"></span>${me.role ? `<span class="chip" data-tip="Your role in ${esc(me.name)}. An admin sets it in Vanik OS.">${esc(me.role)}</span>` : ''}${themeButton()}${userButton()}</header><div class="scroll" id="scroll"><div class="page">${content}</div></div></div></div>`;
 }
 const loading = '<p class="muted">Loading…</p>';
 
@@ -194,7 +196,7 @@ function deskPage(id) {
     + (!rows.length ? `<div class="empty">${icon('inbox')}Nothing here.</div>` : `<div class="card"><table class="list"><tr><th>Request</th><th>From</th><th>Priority</th><th>First reply</th><th>Solved</th><th>Looked after by</th></tr>${rows.map(t => `<tr><td><a href="#/app/desk/${t.id}"><b>${esc(t.subject)}</b></a><div class="small faint">#${t.n} · ${ago(t.createdAt)}</div></td><td>${esc(t.from)}</td><td>${t.priority === 'high' ? chip('High', 'err', false) : t.priority === 'low' ? chip('Low', 'line', false) : chip('Normal', 'line', false)}</td><td>${timer(t.firstState, t.firstDue)}</td><td>${timer(t.resolveState, t.resolveDue)}</td><td class="muted">${esc(t.assigneeName || 'Nobody yet')}</td></tr>`).join('')}</table></div>`));
 }
 
-const PAGES = { idp: idpPage, desk: deskPage, echo: echoPage, mbot: mbotPage, scout: scoutPage, measurebook: mbPage };
+const PAGES = { idp: idpPage, desk: deskPage, echo: echoPage, sense: sensePage, scout: scoutPage, measurebook: mbPage };
 export { appShell, get, put, P, readFiles };
 export function suiteAppPage(parts) {
   const [id, sub] = parts, B = S.boot, a = B.suite && B.suite.apps.find(x => x.id === id);

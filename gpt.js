@@ -1,5 +1,6 @@
 // The VanikGPT app people use: chat, sources, assistants, knowledge.
-import { navToggle, S, $, esc, icon, info, chip, initials, go, bytes, ago, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, accessDrafts, accessPicker, accessLabel, pickFiles, downloadText, when, FILE_ACCEPT } from './core.js';
+import { hint } from './hints.js';
+import { navToggle, S, $, esc, icon, info, chip, initials, go, bytes, ago, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, accessDrafts, accessPicker, accessLabel, pickFiles, downloadText, when, FILE_ACCEPT, LOGO } from './core.js';
 import { osShell, uploadFiles } from './os.js';
 
 const G = { chat: null, chatId: null, streaming: null, draftText: '', newOpts: { model: null, sources: 'all', assistantId: null, effort: 'balanced' }, slashOpen: false, listening: false, rec: null, catalog: null, search: '', searchRes: null, toBottom: false, focus: false, editOf: null, shared: null, sharedKey: '', docs: {}, doc: null, docKey: '', colDocs: {}, hitKey: '' };
@@ -46,7 +47,7 @@ function chatList() {
 export function gptShell(active, content) {
   const B = S.boot;
   return `<div class="gpt"><aside class="gpt-nav">
-    <div class="brand"><span class="app-ico" style="width:26px;height:26px;border-radius:8px">${icon('forum')}</span><span>VanikGPT</span>${B.admin ? `<a class="icon-btn sm right tip-down tip-left" href="#/os/apps/vanikgpt/overview" data-tip="Manage in Vanik OS" aria-label="Manage in Vanik OS">${icon('tune')}</a>` : ''}</div>
+    <div class="brand">${LOGO}<span class="vk-brand"><small>Vanik Edge</small><b>VanikGPT</b></span>${hint('gpt')}${B.admin ? `<a class="icon-btn sm right tip-down tip-left" href="#/os/apps/vanikgpt/overview" data-tip="Manage in Vanik OS" aria-label="Manage in Vanik OS">${icon('tune')}</a>` : ''}</div>
     <a class="btn ghost newchat" href="#/gpt">${icon('add')}New chat</a>
     <input class="input" placeholder="Search chats" value="${esc(G.search)}" data-on="chat-search" aria-label="Search chats">
     <div class="chatlist" id="chatlist">${chatList()}</div>
