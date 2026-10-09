@@ -1,7 +1,18 @@
 // Vanik OS console pages that VanikGPT touches: Apps, the VanikGPT manage page, Knowledge base, Model Hub, People, Settings.
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
 
-const NAV = [['home', 'Home', 'home'], ['apps', 'Apps', 'apps'], ['knowledge', 'Knowledge base', 'library_books'], 'Platform', ['models', 'Model Hub', 'memory'], ['train', 'Train your LLM', 'trending_up'], ['api-gateway', 'API gateway', 'api'], ['connectors', 'Connectors', 'storage'], ['devices', 'Devices', 'dns'], 'Admin', ['people', 'People', 'group'], ['access', 'Access', 'admin_panel_settings'], ['settings', 'Settings', 'settings']];
+const NAV = [['home', 'Home', 'home'], ['apps', 'Apps', 'apps'], ['knowledge', 'Knowledge', 'library_books'], ['models', 'Models', 'memory'], ['people', 'People', 'group'], ['activity', 'Activity', 'insights'], ['devices', 'Appliance', 'dns']];
+// which place an older page key belongs to, and the tabs each place shows on its top-level pages
+const PLACE = { home: 'home', apps: 'apps', knowledge: 'knowledge', connectors: 'knowledge', models: 'models', 'api-gateway': 'models', train: 'models', people: 'people', access: 'people', activity: 'activity', devices: 'devices', settings: 'devices' };
+const TABS = {
+  apps: [['#/os/apps', 'Apps'], ['#/os/connectors/systems', 'Connected systems']],
+  knowledge: [['#/os/knowledge', 'Collections'], ['#/os/connectors', 'Sources']],
+  models: [['#/os/models', 'On this appliance'], ['#/os/models/outside', 'Outside your network'], ['#/os/api-gateway/keys', 'API keys'], ['#/os/api-gateway/playground', 'Playground'], ['#/os/api-gateway/webhooks', 'Webhooks'], ['#/os/train', 'Train']],
+  people: [['#/os/people', 'People'], ['#/os/access', 'Access']],
+  activity: [['#/os/activity', 'Usage'], ['#/os/activity/audit', 'Audit log'], ['#/os/access/evidence', 'Evidence']],
+  devices: [['#/os/devices', 'Overview'], ['#/os/devices/network', 'Network'], ['#/os/devices/storage', 'Storage'], ['#/os/settings', 'Updates and power'], ['#/os/devices/monitoring', 'Monitoring'], ['#/os/devices/support', 'Support'], ['#/os/devices/advanced', 'Advanced']],
+};
+const ALIAS = { '#/os/api-gateway': '#/os/api-gateway/keys', '#/os': '#/os/home' };
 const OTHER_APPS = [['Intelligent Document Processing', 'Extract structured data from any document, on your own hardware.', 'description'], ['Vanik Desk', 'Customer support with tickets, SLAs and AI assistance, on your own fleet.', 'support_agent'], ['Vanik Echo', 'Live meeting transcription with speaker labels, on your own Vanik Appliance.', 'graphic_eq'], ['Vanik MeasureBook', 'Turn tender drawings into a bid-ready BOQ, with every quantity traceable.', 'straighten'], ['Vanik Scout', 'Rank a backlog of resumes against an ideal job profile, with its reasoning shown.', 'person_search']];
 const LIVE_OS = 'https://os.vanikedge.ai/';
 const cache = { key: '', usage: null, audit: null, docs: {}, doc: null };
@@ -9,13 +20,18 @@ export const osRouteChanged = () => { cache.key = ''; };
 function ensure(key, loader) { if (cache.key === key) return; cache.key = key; loader().then(rerender).catch(e => toast(e.message, 'err')); }
 
 export function osShell(active, crumb, content) {
-  const B = S.boot;
+  const B = S.boot, raw = (location.hash || '#/os/home').replace(/\/$/, ''), hash = ALIAS[raw] || raw;
+  const place = hash === '#/os/access/evidence' ? 'activity' : hash === '#/os/connectors/systems' ? 'apps' : /^#\/os\/(help|notifications)/.test(hash) ? '' : PLACE[active] || 'home', tabs = TABS[place], on = tabs && tabs.find(t => t[0] === hash);
+  const installed = (B.app.status === 'not_installed' ? 0 : 1) + ((B.suite || { apps: [] }).apps.filter(x => x.status !== 'not_installed').length);
   return `<div class="shell"><aside class="console-nav">
-    <a class="brand" href="#/os/apps">${LOGO}<span>VANIK <em>OS</em></span></a>
+    <a class="brand" href="#/os/home">${LOGO}<span>VANIK <em>OS</em></span></a>
     <button class="nav-search" data-act="palette">${icon('search')}Search everything<kbd>Ctrl K</kbd></button>
-    ${NAV.map(n => typeof n === 'string' ? `<span class="nav-group-label">${n}</span>` : `<a class="nav-item ${active === n[0] ? 'is-active' : ''}" href="#/os/${n[0]}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'apps' ? `<span class="count">${(B.app.status === 'not_installed' ? 0 : 1) + ((B.suite || { apps: [] }).apps.filter(x => x.status !== 'not_installed').length)}</span>` : ''}</a>`).join('')}
+    ${NAV.map(n => `<a class="nav-item ${place === n[0] ? 'is-active' : ''}" href="#/os/${n[0]}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'apps' ? `<span class="count">${installed}</span>` : ''}</a>`).join('')}
+    <span class="grow"></span><a class="nav-item" href="#/me">${icon('person')}<span>My apps</span></a><a class="nav-item ${hash === '#/os/help' ? 'is-active' : ''}" href="#/os/help">${icon('help_outline')}<span>Help</span></a>
   </aside><div class="main"><header class="topbar">${navToggle()}<span class="crumb">${esc(B.tenant.name)} / <b>${crumb}</b></span><span class="right"></span>
-    <span class="pill ${B.device.online ? '' : 'off'} tip-down" data-tip="${B.device.online ? 'Reaching ' + esc(B.device.name) : 'The appliance is offline. Apps and models are stopped.'}"><i></i>Vanik Appliance ${B.device.online ? 'online' : 'offline'}</span>${themeButton()}${userButton()}</header>
+    <span class="pill ${B.device.online ? '' : 'off'} tip-down" data-tip="${B.device.online ? 'Reaching ' + esc(B.device.name) : 'The appliance is offline. Apps and models are stopped.'}"><i></i>Vanik Appliance ${B.device.online ? 'online' : 'offline'}</span>
+    <button class="icon-btn bordered tip-down bell" data-act="notif" data-tip="Notifications" aria-label="Notifications">${icon('notifications_none')}${B.attention.length ? '<i></i>' : ''}</button>${themeButton()}${userButton()}</header>
+    ${on ? `<nav class="subnav">${tabs.map(t => `<a class="${t === on ? 'on' : ''}" href="${t[0]}">${t[1]}</a>`).join('')}</nav>` : ''}
     <div class="scroll" id="scroll"><div class="page">${content}</div></div></div></div>`;
 }
 
@@ -44,7 +60,7 @@ function pageApps() {
       <div class="foot"><span class="mono grow">Needs ${a.needsGb} GB</span><button class="btn" data-act="app-install">Install</button></div></div>`)
     + sOut.map(sCard).join('');
   return osShell('apps', 'Apps', `
-    <div class="page-head"><div><h1>Apps</h1><p class="sub">${1 + suite.length} apps · ${count} installed · ${1 + suite.length - count} available</p></div></div>
+    <div class="page-head"><div><h1>Apps</h1><p class="sub">What is installed and what can be added. ${1 + suite.length} apps · ${count} installed · ${1 + suite.length - count} available</p></div></div>
     <div class="section-title"><h2>On your Vanik Appliance</h2><span class="mono">${count} installed</span></div>
     ${count ? `<div class="grid">${gptCard}${sIn.map(sCard).join('')}</div>` : `<div class="empty">${icon('apps')}Nothing installed yet. Pick one below to put it on a device.</div>`}
     ${avail ? `<div class="section-title"><h2>Available to install</h2></div><div class="grid">${avail}</div>` : ''}`);
@@ -281,7 +297,7 @@ const usedByGpt = id => { const a = S.boot.app; return a.status !== 'not_install
 function pageKnowledge() {
   const B = S.boot, docs = B.collections.reduce((n, c) => n + c.docCount, 0), size = B.collections.reduce((n, c) => n + c.bytes, 0);
   return osShell('knowledge', 'Knowledge base', `
-    <div class="page-head"><div class="grow"><h1>Knowledge base</h1><p class="sub">Document collections your apps search. Everything stays on the Vanik Appliance.</p></div><button class="btn lg" data-act="col-new">New collection</button></div>
+    <div class="page-head"><div class="grow"><h1>Collections</h1><p class="sub">The documents your apps search. Everything stays on the appliance.</p></div><button class="btn lg" data-act="col-new">New collection</button></div>
     ${B.collections.length ? `<div class="grid">${B.collections.map(c => `<a class="card app-card" href="#/os/knowledge/${c.id}">
       <div class="row"><span class="avatar sq">${esc(initials(c.name))}</span><div class="grow"><h3 class="ellipsis">${esc(c.name)}</h3><span class="mono">${c.docCount} ${c.docCount === 1 ? 'document' : 'documents'} · ${bytes(c.bytes)}</span></div><button class="icon-btn sm" data-act="col-menu" data-id="${c.id}" data-stop aria-label="More">${icon('more_vert')}</button></div>
       <div class="row wrap" style="gap:6px">${chip(c.docCount ? 'Searchable' : 'Empty', c.docCount ? 'ok' : '')}${chip(accessLabel(c.access), 'line', false)}${usedByGpt(c.id) ? chip('Used by VanikGPT', 'line', false) : chip('Not used by an app yet', 'line', false)}</div>
@@ -360,15 +376,17 @@ for (const ev of ['dragover', 'dragleave', 'drop']) document.addEventListener(ev
 });
 
 // ---------- Model Hub
+const GOOD = [[/embedding|bge/i, 'Search over your documents'], [/vl|vision/i, 'Reading drawings and images'], [/ocr/i, 'Reading scanned pages'], [/rumik|indic/i, 'Indian languages'], [/2\db|30b|20b|70b|120b/i, 'Answers from documents and longer reasoning'], [/./, 'Quick, short answers']];
+const goodFor = id => GOOD.find(g => g[0].test(id))[1];
 function pageModels() {
   const B = S.boot, d = B.device, used = id => B.app.status !== 'not_installed' && B.app.config.models.includes(id);
   watchModels();
   const order = { serving: 0, starting: 0, parked: 1, available: 2 }, list = [...B.models].sort((a, b) => order[a.status] - order[b.status] || a.memGb - b.memGb);
-  return osShell('models', 'Model Hub', `
-    <div class="page-head"><div class="grow"><h1>Model Hub</h1><p class="sub">${B.models.length} models · ${d.serving} serving</p></div><button class="btn ghost" data-act="model-import" data-tip="For sites with no connection: add a signed model package from a drive">${icon('upload_file')}Add from a file</button></div>
+  return osShell('models', 'On this appliance', `
+    <div class="page-head"><div class="grow"><h1>Models on this appliance</h1><p class="sub">${B.models.length} models · ${d.serving} serving. Serve one to use it; park it to free its memory.</p></div><button class="btn ghost" data-act="model-import" data-tip="For sites with no connection: add a signed model package from a drive">${icon('upload_file')}Add from a file</button></div>
     <div class="card" style="margin-bottom:18px"><div class="row"><div class="grow"><div class="stat"><span class="k">GPU memory ${info('Memory in use by serving models and installed apps.')}</span></div><div class="row" style="margin-top:8px"><b style="font-size:22px">${d.usedGb}</b><span class="muted">/ ${d.memGb} GB</span><span class="right muted small">${d.freeGb} GB free · ${d.serving} of ${d.slots} model slots in use</span></div><div class="meter" style="margin-top:10px"><i style="width:${Math.min(100, Math.round(100 * d.usedGb / d.memGb))}%"></i></div></div></div></div>
     <div class="card"><table class="list"><tr><th>Model</th><th>Type</th><th>Memory</th><th>Context</th><th>Status</th><th></th></tr>
-    ${list.map(m => `<tr><td><div class="row"><span class="avatar sq">${esc(m.id.slice(0, 2).toUpperCase())}</span><div><b>${esc(m.id)}</b>${m.note ? `<div class="small faint">${esc(m.note)}</div>` : ''}${used(m.id) ? `<div class="small faint">Used by VanikGPT</div>` : ''}</div></div></td>
+    ${list.map(m => `<tr><td><div class="row"><span class="avatar sq">${esc(m.id.slice(0, 2).toUpperCase())}</span><div><b>${esc(m.id)}</b>${B.app.status !== 'not_installed' && B.app.config.defaultModel === m.id ? ' ' + chip('Default for chat', 'line', false) : ''}<div class="small muted">${goodFor(m.id)}</div>${m.note && !/indic|drawings/i.test(m.note) ? `<div class="small faint">${esc(m.note)}</div>` : ''}${used(m.id) ? `<div class="small faint">Used by VanikGPT</div>` : ''}</div></div></td>
       <td>${{ chat: 'Chat and documents', embedding: 'Search', vision: 'Drawings and images', speech: 'Speech' }[m.kind] || esc(m.kind)}</td><td>${m.memGb} GB</td><td class="muted">${m.context ? m.context.toLocaleString() : '—'}</td>
       <td>${m.status === 'serving' ? chip('Serving', 'ok') + ` <span class="mono">port ${m.port}</span>` : m.status === 'starting' ? chip('Starting', 'warn') : m.status === 'parked' ? chip('Parked', '') : chip('Not on device', '')}${m.status === 'serving' || m.status === 'starting' ? '' : ' ' + (d.serving >= d.slots ? chip('No free slot', 'err', false) : m.memGb > d.freeGb ? chip('Too big now', 'err', false) : m.memGb > d.freeGb * 0.85 ? chip('Tight', 'warn', false) : chip('Fits', 'ok', false))}${m.testedAt && m.status === 'serving' ? `<div class="small faint">Test question passed ${ago(m.testedAt)}</div>` : ''}</td>
       <td class="act">${m.status === 'serving' ? `<button class="btn ghost" data-act="model-park" data-id="${esc(m.id)}">Park</button>` : m.status === 'starting' ? `<button class="btn ghost" data-act="model-cancel" data-id="${esc(m.id)}">Cancel</button>` : `<button class="btn" data-act="model-serve" data-id="${esc(m.id)}">Serve</button>`}</td></tr>`).join('')}</table></div>`);

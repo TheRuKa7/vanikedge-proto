@@ -59,6 +59,8 @@ const AG = { PLUGINS: [], TEMPLATES: [], endSession() {}, mcpViews: () => [] };
 const WK = { canWrite: () => false, openTasks: () => 0 };
 const MO = { memoryFor: () => [] };
 const PA = { flags: () => ({}) };
+const PL = { keyGate: () => null, sample() {} };
+const RL = { sample() {} };
 const SU = { usedGb: () => 0, boot: () => null, sample() {}, canUse: () => false, apps: () => [] };
 const ED = { outsideOn: () => [], isOutside: () => false, callLimit: () => 10, sendsDocs: () => false, askOutside: async () => {} };
 const SYSTEM = { id: 'system', name: 'Vanik OS', role: 'owner', teams: [] };
@@ -826,12 +828,14 @@ function readPage(question, snap) {
   return { text: snap.text.slice(0, 1400).trim() + (snap.text.length > 1400 ? '…' : ''), summary: question ? 'Nothing on the page matches; kept the top of the page' : `Read ${snap.text.length.toLocaleString()} characters` };
 }
 
-Object.assign(FX, require('./features')({ DEMO, db, on, err, uid, now, audit, save, isAdmin, GW, A, byId, needGpt, SYSTEM, addDocument, verhoeff, commandViews, probes, search, allowed, estTok, streamModel, passageAnswer }));
+Object.assign(FX, require('./features')({ keyGate: (k, m) => PL.keyGate(k, m), DEMO, db, on, err, uid, now, audit, save, isAdmin, GW, A, byId, needGpt, SYSTEM, addDocument, verhoeff, commandViews, probes, search, allowed, estTok, streamModel, passageAnswer }));
 Object.assign(AG, require('./agent')({ callLimit: () => ED.callLimit(), allowed, DEMO, db, on, err, uid, now, audit, save, isAdmin, GW, A, byId, needGpt, verhoeff, answer, streamModel, readPage, chatTables: c => db.documents.filter(d => d.collectionId === 'chat:' + c.id && d.table).map(d => ({ name: d.name, table: d.table })) }));
 Object.assign(WK, require('./work')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, allowed, cleanAccess, addDocument, canReadDoc, plugins: () => AG.PLUGINS }));
 Object.assign(MO, require('./more')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, call: (...a) => call(...a), ask: (u, c, body) => answer(u, c, body, () => {}, quiet) }));
 Object.assign(PA, require('./parity')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt }));
 Object.assign(SU, require('./suite')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, cleanAccess, search, DEMO, freeGb, addDocument, canWrite: (u, c) => WK.canWrite(u, c), call: (...a) => call(...a), issueKey: (...a) => FX.issueKey(...a), revokeSystemKeys: n => FX.revokeSystemKeys(n) }));
+Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
+Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
 Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, probes, issueKey: (...a) => FX.issueKey(...a) }));
 
 // The sample workspace is built through the same routes a person uses, once, when the server starts with --demo.
@@ -841,7 +845,7 @@ let ready = Promise.resolve();
 if (DEMO && !db.sample) ready = require('./sample').seed({ db, call, audit, uid, ask: (u, c, body, script) => answer(u, c, body, () => {}, quiet, script), attach: (u, c, b) => addDocument(u, 'chat:' + c.id, b),
   fastDeploy: () => { const d = db.app.deploys[0]; if (d && !d.result) { d.t0 = new Date(Date.now() - 120000).toISOString(); tick(); } } }).then(save, e => { console.error('Sample workspace:', e); });
 
-ready = ready.then(() => { if (DEMO && db.sample) { SU.sample(); save(); } }); // the other five apps and their sample content
+ready = ready.then(() => { if (DEMO && db.sample) { SU.sample(); RL.sample(); PL.sample(); save(); } }); // the other five apps and their sample content
 
 // ---------- http
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon' };

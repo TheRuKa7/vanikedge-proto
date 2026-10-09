@@ -330,3 +330,25 @@ body.no-rating [data-act="msg-up"], body.no-rating [data-act="msg-down"], body.n
 table.list tr.sel td { background: var(--vnk-surface-2); }
 @media (max-width: 900px) { .card.flat.mine { margin-left: 12px; } .tline { grid-template-columns: 1fr; gap: 2px; } }
 @media (max-width: 700px) { .page-head > .grow { flex: 1 1 100%; min-width: 0; } .page-head > .app-ico + .grow { flex: 1 1 60%; } }
+
+/* the console after the audit: tabs of a place under the top bar, the next-step card, bars, the bell */
+.subnav { display: flex; gap: 22px; padding: 0 32px; background: var(--vnk-surface); border-bottom: 1px solid var(--vnk-border); overflow-x: auto; flex: none; }
+.subnav a { padding: 11px 0; font-weight: 600; font-size: 13.5px; color: var(--vnk-ink-3); border-bottom: 2px solid transparent; white-space: nowrap; text-decoration: none; } .subnav a:hover { color: var(--vnk-ink); } .subnav a.on { color: var(--vnk-ink); border-color: var(--vnk-brand); }
+.console-nav > .grow { flex: 1; min-height: 12px; }
+.card.next { border-color: var(--vnk-brand); margin-top: 16px; } .card.next h3 { font-size: 17px; white-space: normal; }
+.grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat b { display: block; font-size: 22px; margin-top: 4px; }
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin: 6px 0 8px; } .bars .bar { flex: 1; height: 100%; display: flex; align-items: flex-end; } .bars .bar i { display: block; width: 100%; background: var(--vnk-ink-2); border-radius: 3px 3px 0 0; min-height: 2px; } .bars .bar:hover i { background: var(--vnk-brand); }
+.bell { position: relative; } .bell i { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--vnk-warn); border: 2px solid var(--vnk-surface); }
+@media (max-width: 900px) { .subnav { padding: 0 16px; gap: 16px; } .grid.three { grid-template-columns: 1fr; } }
+.seg { max-width: 100%; overflow-x: auto; } .seg button { white-space: nowrap; flex: none; }
+
+/* v15: the one-to-one apps */
+.sc-grid { display: grid; grid-template-columns: 190px minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+.mb-ws { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
+.mb-draw svg { display: block; height: auto; border-radius: 8px; }
+.hit.sel { background: var(--vnk-surface-2); border-radius: 8px; } .hit > button.grow:hover b { color: var(--vnk-brand); }
+.btn.ghost.on { border-color: var(--vnk-brand); color: var(--vnk-brand); }
+button.empty { cursor: pointer; font: inherit; } button.empty:hover { border-color: var(--vnk-brand); }
+button.card { font: inherit; color: inherit; cursor: pointer; } a.card { color: inherit; }
+@media (max-width: 1180px) { .sc-grid { grid-template-columns: minmax(0, 1fr); } .mb-ws { grid-template-columns: minmax(0, 1fr); } }
+.page:has(.mb-ws), .page:has(.sc-grid) { max-width: none; }

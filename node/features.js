@@ -37,7 +37,7 @@ module.exports = function install(ctx) {
   on('POST', '/api/webhooks/:id/test', ({ p }) => { const h = byId(db.webhooks, p.id, 'Webhook'); deliver(h, 'webhook.test', { message: 'Test delivery from Vanik OS.' }); return { ok: true }; }, A);
 
   // ---------- API gateway: keys shown once, stored hashed; OpenAI-compatible proxy with a per-key limit
-  const keyView = k => ({ id: k.id, name: k.name, last4: k.last4, createdBy: k.createdBy, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt, revokedAt: k.revokedAt || null, system: !!k.system, requests: k.requests || 0, tokens: k.tokens || 0, knowledge: k.knowledge || 'none' });
+  const keyView = k => ({ models: k.models || [], dailyLimit: k.dailyLimit || 0, expiresOn: k.expiresOn || '', usedToday: k.day && k.day.d === now().slice(0, 10) ? k.day.n : 0, id: k.id, name: k.name, last4: k.last4, createdBy: k.createdBy, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt, revokedAt: k.revokedAt || null, system: !!k.system, requests: k.requests || 0, tokens: k.tokens || 0, knowledge: k.knowledge || 'none' });
   function issueKey(name, by, system) {
     const raw = 'sk-vnk-' + crypto.randomBytes(18).toString('base64url');
     const k = { id: uid('key'), name, hash: sha(raw), last4: raw.slice(-4), createdBy: by, createdAt: now(), lastUsedAt: null, system: !!system, requests: 0, tokens: 0 };
@@ -87,6 +87,7 @@ module.exports = function install(ctx) {
   }, { open: true });
   async function proxy(kind, { req, res, body }) {
     const k = gwAuth(req, res); if (!k) return;
+    if (!k.console) { const g = ctx.keyGate(k, body.model); if (g) return gwFail(res, g[0], g[1], g[2]); } // scope, daily limit and end date of the key
     if (kind === 'chat/completions' && body.use_context) {
       const docs = keyDocs(k); if (!docs) return gwFail(res, 403, 'knowledge_not_allowed', 'This key cannot read the knowledge base. Create a key with knowledge access.');
       const q = [...(body.messages || [])].reverse().find(m => m.role === 'user'), hits = q ? await ctx.search(String(q.content), docs, 5) : [];

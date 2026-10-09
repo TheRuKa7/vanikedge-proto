@@ -17,9 +17,10 @@ const DEV = [['', 'Overview'], ['network', 'Network'], ['storage', 'Storage'], [
 const bar = (used, total) => `<div class="meter"><i style="width:${Math.min(100, Math.max(1, used / total * 100)).toFixed(1)}%"></i></div>`;
 
 // ---------- pieces added to pages that already exist
-function hero() {
+export const edgeNeed = () => need();
+export function hero() {
   const B = S.boot, d = B.device, n = (X.d || {}).network || B.network || {}, local = 'https://' + (n.local || 'vanik.local'), up = d.online;
-  return `<div class="hero-card"><div class="row"><span class="cap">Vanik Appliance</span>${chip(up ? 'Healthy' : 'Offline', up ? 'ok' : 'err')}<a class="btn ghost right" href="#/os/devices/network">Network</a></div>
+  return `<div class="hero-card"><div class="row"><span class="cap">Vanik Appliance</span>${chip(!up ? 'Offline' : B.attention.length ? 'Needs attention' : 'Healthy', !up ? 'err' : B.attention.length ? 'warn' : 'ok')}<a class="btn ghost right" href="#/os/devices/network">Network</a></div>
     <h2>${esc(d.name)}</h2>
     <div class="facts"><div><span class="cap">Vanik OS</span><b>${esc(d.agent)}</b></div><div><span class="cap">People</span><b>${B.users.length}</b></div><div><span class="cap">Models serving</span><b>${d.serving} of ${d.slots}</b></div><div><span class="cap">GPU memory</span><b>${d.usedGb} / ${d.memGb} GB</b></div></div>
     <div class="addr"><div><span class="cap">Inside the office</span><div class="row"><span class="mono">${esc(local)}</span>${copy(local)}</div></div>${n.publicOn && n.domain ? `<div><span class="cap">From anywhere</span><div class="row"><span class="mono">https://${esc(n.domain)}</span>${copy('https://' + n.domain)}</div></div>` : `<div><span class="cap">From anywhere</span><div class="small" style="opacity:.7;margin-top:4px">Closed. Only the office network can reach it.</div></div>`}</div></div>`;
@@ -51,12 +52,7 @@ acts.pw = el => { const v = el.dataset.v;
 // Adds the pieces above to the page a person asked for.
 export function edgeDecorate(parts, html) {
   if (!S.boot || !S.boot.admin || typeof html !== 'string') return html;
-  const [p, a] = parts, after = add => html.replace(/(<div class="page-head">.*)/, (m) => m + add);
-  if (p === 'home') { need(); return after(hero()); }
-  if (p === 'devices' && !a) return after(tabs(DEV, '', '#/os/devices'));
-  if (p === 'models' && !a) return after(tabs(HUB, '', '#/os/models'));
-  if (p === 'people') { need(); return after(directoryCard()); }
-  if (p === 'settings') { need(); return after(systemCards()); }
+  if (parts[0] === 'people') { need(); return html.replace(/(<div class="page-head">.*)/, m => m + directoryCard()); }
   return html;
 }
 
@@ -72,7 +68,7 @@ acts['sup-end'] = el => put(`/api/edge/support/${el.dataset.id}/end`, {}, 'POST'
 acts['sup-diag'] = async () => downloadText('vanik-diagnostics.json', JSON.stringify(await api('GET', '/api/edge/diagnostics'), null, 2), 'application/json');
 ins['ret-days'] = async el => { await put('/api/edge/settings', { logsDays: +el.value }); toast('Saved.'); };
 function devicesPage(sub) {
-  const d = need(), head = `<div class="page-head"><div><h1>Devices</h1><p class="sub">${{ network: 'How this appliance is reached, from the office and from outside.', storage: 'What is filling the disk.', monitoring: 'How the appliance has behaved over the last day.', support: 'Let a Vanik engineer in for a set time, when you need help.' }[sub]}</p></div></div>${tabs(DEV, sub, '#/os/devices')}`;
+  const d = need(), head = `<div class="page-head"><div><h1>${DEV.find(t => t[0] === sub)[1]}</h1><p class="sub">${{ network: 'How this appliance is reached, from the office and from outside.', storage: 'What is filling the disk.', monitoring: 'How the appliance has behaved over the last day.', support: 'Let a Vanik engineer in for a set time, when you need help.' }[sub]}</p></div></div>`;
   if (!d) return osShell('devices', 'Devices', head + '<p class="muted">Loading…</p>');
   let body = '';
   if (sub === 'network') { const n = d.network, local = 'https://' + n.local;
@@ -93,7 +89,7 @@ function devicesPage(sub) {
     body = `<div class="stack" style="max-width:640px;gap:16px"><div class="card">${open ? `<div class="banner ok" style="margin-bottom:0">${icon('lock_open')}<span class="grow"><b>Access is open for ${esc(open.engineer)}</b><br><span class="small">Until ${when(open.endsAt)} · ${esc(open.reason)}</span></span><button class="btn ghost" data-act="sup-end" data-id="${open.id}">End now</button></div>` : `<div class="row" style="gap:12px;align-items:flex-end"><label class="field"><span>For how long</span><select class="input" id="s-min"><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option></select></label><label class="field grow"><span>Why</span><input class="input" id="s-why" placeholder="Deploy is stuck on step 3"></label><button class="btn" data-act="sup-open">Give access</button></div><p class="small faint" style="margin-top:10px">Access ends by itself. You can end it sooner here. Every session is in the audit log.</p>`}</div>
       <div class="card"><div class="set-row"><div class="grow"><div class="lbl">Diagnostics report ${info('Versions, health checks, storage and counts. No chats, documents, keys or passwords.')}</div><div class="small muted">Send this to support without opening the appliance to anyone.</div></div><button class="btn ghost" data-act="sup-diag">Download</button></div></div>
       <div class="card"><div class="card-head"><h3>Past sessions</h3></div>${d.support.length ? d.support.map(s => `<div class="set-row"><div class="grow"><div class="lbl">${esc(s.engineer)}</div><div class="small muted">Opened by ${esc(s.by)} · ${s.minutes} minutes · ${when(s.openedAt)} · ${esc(s.reason)}</div></div>${chip(s.status === 'open' ? 'Open' : 'Ended', s.status === 'open' ? 'warn' : 'line', false)}</div>`).join('') : '<p class="muted">None yet.</p>'}</div></div>`; }
-  return osShell('devices', `<a href="#/os/devices">Devices</a> / ${DEV.find(t => t[0] === sub)[1]}`, head + body);
+  return osShell('devices', DEV.find(t => t[0] === sub)[1], head + body);
 }
 
 // ---------- Model Hub: models outside the network
@@ -103,10 +99,10 @@ acts['out-remove'] = () => confirmBox('Remove this provider?', 'Its models disap
 acts['out-model'] = async el => { try { await put(`/api/edge/outside/${X.prov}/models`, { id: el.dataset.id || $('#o-id').value, on: el.dataset.on !== '0' }, 'POST'); await refresh(); } catch (e) { toast(e.message, 'err'); } };
 acts['out-docs'] = async () => { await put('/api/edge/settings', { outsideDocs: !X.d.outsideDocs }); };
 function outsidePage() {
-  const d = need(), head = `<div class="page-head"><div><h1>Model Hub</h1><p class="sub">Models from other companies, used through this appliance. A question sent to one leaves your network.</p></div></div>${tabs(HUB, 'outside', '#/os/models')}`;
+  const d = need(), head = `<div class="page-head"><div><h1>Models outside your network</h1><p class="sub">Models from other companies, used through this appliance. A question sent to one leaves your network.</p></div></div>`;
   if (!d) return osShell('models', 'Model Hub', head + '<p class="muted">Loading…</p>');
   const p = d.outside.find(x => x.id === X.prov) || d.outside[0], on = new Set(p.models.map(m => m.id));
-  return osShell('models', 'Model Hub', head + `<div class="banner plain" style="margin-bottom:16px">${icon('public')}<span class="grow">Each outside model is switched on one at a time. People see it in a separate group in the model picker, the chat says the question leaves the appliance, and every use is in the audit log.</span></div>
+  return osShell('models', 'Outside your network', head + `<div class="banner plain" style="margin-bottom:16px">${icon('public')}<span class="grow">Each outside model is switched on one at a time. People see it in a separate group in the model picker, the chat says the question leaves the appliance, and every use is in the audit log.</span></div>
     <div class="two-pane"><div class="side-tabs">${d.outside.map(x => `<a class="${x.id === p.id ? 'on' : ''}" data-act="out-prov" data-id="${x.id}" style="cursor:pointer;display:flex"><span class="grow">${esc(x.name)}</span><span class="small faint">${x.connected ? x.models.length + ' on' : ''}</span></a>`).join('')}</div>
       <div class="grow stack" style="gap:16px;min-width:0"><div class="card"><div class="card-head"><h3>${esc(p.name)}</h3>${p.connected ? chip('Connected · key ends ' + esc(p.last4), 'ok', false) : ''}</div>
           <div class="row"><input class="input grow" id="o-key" type="password" autocomplete="off" placeholder="${p.connected ? 'Paste a new key to replace the saved one' : 'API key. Use the word sample to try it without one'}">${p.id === 'custom' || p.id === 'azure' ? `<input class="input" id="o-base" style="width:260px" placeholder="https://host/v1" value="${esc(p.base)}">` : ''}<button class="btn" data-act="out-key">Save</button>${p.connected ? `<button class="btn ghost" data-act="out-remove">Remove</button>` : ''}</div><p class="small faint" style="margin-top:8px">The key stays on this appliance and is never shown again.</p></div>
@@ -134,7 +130,7 @@ export function adminExtra() {
 }
 acts['my-key-new'] = () => modal({ title: 'New API key', body: `<input class="input" id="k-name" maxlength="40" placeholder="What will use it, for example my laptop" aria-label="Name">`, actions: [{ label: 'Create', run: async o => { const r = await api('POST', '/api/my/api/keys', { name: $('#k-name', o).value }); X.my.keys = r.keys; rerender(); modal({ title: 'Copy the key now', text: 'It is not shown again.', cancel: 'Done', body: `<div class="row"><span class="mono grow" style="overflow-wrap:anywhere;color:var(--vnk-ink)">${esc(r.key)}</span>${copy(r.key)}</div>` }); } }] });
 acts['my-key-del'] = el => confirmBox('Revoke this key?', 'Anything using it stops working straight away.', 'Revoke', async () => { X.my.keys = (await api('DELETE', '/api/my/api/keys/' + el.dataset.id)).keys; rerender(); });
-export function apiPage() {
+export function apiPage(bare) {
   if (X.myKey !== 'api') { X.myKey = 'api'; api('GET', '/api/my/api').then(m => { X.my = m; rerender(); }).catch(e => toast(e.message, 'err')); }
   const m = X.my, base = location.origin + new URL('./', location).pathname.replace(/\/$/, '') + '/gateway/v1', live = m ? m.keys.filter(k => !k.revokedAt) : [];
   const body = !m ? '<p class="muted">Loading…</p>' : !m.allowed ? `<div class="empty">${icon('key')}Personal API keys are off. An admin can turn them on under Admin.</div>` : `<div class="stack" style="gap:16px">
@@ -144,5 +140,6 @@ export function apiPage() {
   -H "Authorization: Bearer $VANIK_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "${esc(m.models[0] || '')}", "messages": [{"role": "user", "content": "Hello"}]}'</pre><p class="small faint" style="margin-top:8px">It speaks the OpenAI format, so existing tools work by changing the address and the key.</p></div></div>`;
+  if (bare) return { body, allowed: !!(m && m.allowed) };
   return gptShell('settings', `<div class="gpt-top">${navToggle()}<h3 class="grow"><a href="#/gpt/settings">Settings</a> / Your API</h3>${m && m.allowed ? `<button class="btn" data-act="my-key-new">${icon('add')}New key</button>` : ''}</div><div class="scroll" id="scroll"><div class="page" style="max-width:760px">${body}</div></div>`);
 }
