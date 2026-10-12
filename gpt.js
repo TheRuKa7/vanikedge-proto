@@ -1,3 +1,4 @@
+import { inScope } from './scope.js';
 // The VanikGPT app people use: chat, sources, assistants, knowledge.
 import { hint } from './hints.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, go, bytes, ago, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, accessDrafts, accessPicker, accessLabel, pickFiles, downloadText, when, FILE_ACCEPT, LOGO } from './core.js';
@@ -51,7 +52,7 @@ export function gptShell(active, content) {
     <a class="btn ghost newchat" href="#/gpt">${icon('add')}New chat</a>
     <input class="input" placeholder="Search chats" value="${esc(G.search)}" data-on="chat-search" aria-label="Search chats">
     <div class="chatlist" id="chatlist">${chatList()}</div>
-    ${[['assistants', 'Agents', 'smart_toy', '#/gpt/assistants', ['assistants', 'workspace']], ['knowledge', 'Knowledge', 'library_books', '#/gpt/knowledge', ['knowledge']], ['routines', 'Routines', 'bolt', '#/gpt/routines', ['routines', 'flows']], ['tasks', 'Tasks', 'task_alt', '#/gpt/tasks', ['tasks', 'calendar']], ['saved', 'Saved', 'bookmark_border', '#/gpt/saved', ['saved', 'library', 'notes']]].map(n => `<a class="nav-item ${n[4].includes(active) ? 'is-active' : ''}" href="${n[3]}">${icon(n[2])}<span class="grow">${n[1]}</span>${n[0] === 'tasks' && B.openTasks ? `<span class="count">${B.openTasks}</span>` : ''}</a>`).join('')}
+    ${[['assistants', 'Agents', 'smart_toy', '#/gpt/assistants', ['assistants', 'workspace']], ['knowledge', 'Knowledge', 'library_books', '#/gpt/knowledge', ['knowledge']], ['routines', 'Routines', 'bolt', '#/gpt/routines', ['routines', 'flows']], ['tasks', 'Tasks', 'task_alt', '#/gpt/tasks', ['tasks', 'calendar']], ['saved', 'Saved', 'bookmark_border', '#/gpt/saved', ['saved', 'library', 'notes']]].filter(n => inScope(n[3])).map(n => `<a class="nav-item ${n[4].includes(active) ? 'is-active' : ''}" href="${n[3]}">${icon(n[2])}<span class="grow">${n[1]}</span>${n[0] === 'tasks' && B.openTasks ? `<span class="count">${B.openTasks}</span>` : ''}</a>`).join('')}
     <div class="row" style="border-top:1px solid var(--vnk-border);padding-top:10px;margin-top:8px">${userButton()}<span class="right">${themeButton()}</span></div>
   </aside><div class="gpt-main">${content}</div></div>`;
 }
@@ -74,7 +75,7 @@ function composer() {
   const B = S.boot, c = G.chat, o = c || G.newOpts, as = assistantOf(o.assistantId), model = (c ? c.model : (as && as.model) || G.newOpts.model) || B.app.config.defaultModel;
   const busy = G.streaming && (!c || G.streaming.chatId === c.id), files = c ? c.files || [] : [];
   return `<div class="composer-wrap"><div id="uploads"></div><div class="composer" data-chatdrop>
-    ${files.length ? `<div class="files">${files.map(f => `<span class="tag">${icon('description')}<a class="ellipsis" style="max-width:180px" href="#/gpt/source/${f.id}/-/${c.id}">${esc(f.name)}</a><button data-act="file-remove" data-id="${f.id}" aria-label="Remove file">${icon('close')}</button></span>`).join('')}</div>` : ''}
+    ${files.length ? `<div class="files">${files.map(f => `<span class="tag">${icon('description')}<a class="ellipsis" style="max-width:180px" href="#/gpt/source/${f.id}/-/${c.id}">${esc(f.name)}</a>${B.collections.some(k => k.canWrite) ? `<button class="tip-right" data-act="file-share" data-id="${f.id}" data-tip="Share with a team" aria-label="Share with a team">${icon('group_add')}</button>` : ''}<button data-act="file-remove" data-id="${f.id}" aria-label="Remove file">${icon('close')}</button></span>`).join('')}</div>` : ''}
     ${G.editOf ? `<div class="editing">${icon('edit')}<span class="grow">Editing an earlier question. Everything after it will be replaced.</span><button class="link" data-act="edit-cancel">Cancel</button></div>` : ''}
     <div id="slash">${slashHtml()}</div>
     <textarea id="q" rows="1" placeholder="${as ? 'Ask ' + esc(as.name) : 'Ask anything'}" data-on="q-input" aria-label="Your question">${esc(G.draftText)}</textarea>
@@ -107,6 +108,7 @@ const SLASH = [
   ['/use', 'Run a tool from a connector', el => toolMenu(el)], ['/effort', 'Quick, balanced or thorough', el => acts['pick-effort'](el)], ['/model', 'Change the model', el => acts['pick-model'](el)],
   ['/sources', 'Choose where answers come from', el => acts['pick-sources'](el)], ['/new', 'Start a new chat', () => { G.draftText = ''; go('#/gpt'); }], ['/help', 'What VanikGPT can do', () => helpBox()],
 ];
+SLASH.splice(0, SLASH.length, ...SLASH.filter(c => ['/search', '/summarise', '/sources', '/new', '/help'].includes(c[0]))); // the MVP's commands
 const pluginOn = id => { const B = S.boot, c = G.chat || G.newOpts, as = assistantOf(c.assistantId); return B.app.config.tools.enabled.includes(id) && (as ? (as.tools || []).includes(id) : !Array.isArray(c.plugins) || c.plugins.includes(id)); };
 function slashMatches() { const t = G.draftText; if (!/^\/[a-z]*$/i.test(t)) return []; return SLASH.filter(c => c[0].startsWith(t.toLowerCase()) && (!c[3] || pluginOn(c[3]))); }
 function slashHtml() { const m = slashMatches(); return m.length ? `<div class="slash" role="listbox">${m.map((c, i) => `<button class="${i ? '' : 'sel'}" data-act="slash" data-c="${c[0]}" role="option"><b>${c[0]}</b><span>${c[1]}</span></button>`).join('')}</div>` : ''; }
@@ -114,7 +116,7 @@ function runSlash(name, el) { const c = SLASH.find(x => x[0] === name); G.draftT
 acts.slash = el => runSlash(el.dataset.c, $('#q'));
 function helpBox() {
   const B = S.boot;
-  modal({ title: 'What VanikGPT can do', wide: true, cancel: 'Close', body: `<p class="muted">Ask in plain words. Add files with the + button. Type / to see commands.</p><h3 style="margin:16px 0 8px">Commands</h3><dl class="kv">${SLASH.map(c => `<dt class="mono" style="color:var(--vnk-ink)">${c[0]}</dt><dd style="font-weight:400">${c[1]}</dd>`).join('')}</dl><h3 style="margin:16px 0 8px">Abilities</h3>${B.plugins.map(p => `<div class="set-row">${icon(p.icon)}<div class="grow"><div class="lbl">${p.name}</div><div class="small muted">${p.what} Try: <span class="mono">${esc(p.hint)}</span></div></div>${chip(B.app.config.tools.enabled.includes(p.id) ? 'On' : 'Off', B.app.config.tools.enabled.includes(p.id) ? 'ok' : '', false)}</div>`).join('')}<p class="small faint" style="margin-top:12px">Keys: Ctrl K search, Alt T theme, Alt C copy the last answer.</p>` });
+  modal({ title: 'What VanikGPT can do', wide: true, cancel: 'Close', body: `<p class="muted">Ask in plain words. Add files with the + button. Type / to see commands.</p><h3 style="margin:16px 0 8px">Commands</h3><dl class="kv">${SLASH.map(c => `<dt class="mono" style="color:var(--vnk-ink)">${c[0]}</dt><dd style="font-weight:400">${c[1]}</dd>`).join('')}</dl><p class="small faint" style="margin-top:12px">Keys: Ctrl K search, Alt T theme, Alt C copy the last answer.</p>` });
 }
 acts['pick-effort'] = el => { const cur = (G.chat || G.newOpts).effort || 'balanced'; menu(el, [{ heading: 'Effort' }, ...Object.entries(EFFORT).map(([k, v]) => ({ label: v[0], sub: v[1], icon: k === 'quick' ? 'bolt' : k === 'thorough' ? 'psychology' : 'speed', on: k === cur, run: () => setOpt({ effort: k }) }))]); };
 function agentMenu(el) { const B = S.boot; menu(el, [{ heading: 'Agents' }, ...B.assistants.slice(0, 12).map(a => ({ label: a.name, sub: a.description, icon: a.icon || 'smart_toy', run: () => go('#/gpt/new/' + a.id) })), !B.assistants.length && { label: 'No agents yet', sub: 'Add a ready-made one or make your own', icon: 'info_outline', run: () => go('#/gpt/assistants') }, '-', { label: 'Ready-made agents', icon: 'apps', run: () => go('#/gpt/assistants') }, { label: 'New agent', sub: 'Describe the job and get a draft', icon: 'auto_fix_high', run: () => go('#/gpt/assistants/new') }]); }
@@ -131,11 +133,9 @@ function connectorMenu(el) {
     !B.toolConnectors.length && { label: 'None yet', sub: 'A tool connector links VanikGPT to another system', icon: 'info_outline', run: () => {} }, B.admin && '-', B.admin && { label: 'Add a connector', sub: 'Vanik OS, Connectors', icon: 'add_link', run: () => go('#/os/connectors') }]);
 }
 acts.plus = el => {
-  const up = S.boot.app.config.safety.uploads;
+  const up = S.boot.app.config.safety.uploads, o = G.chat || G.newOpts;
   menu(el, [up && { label: 'Add files or photos', sub: 'PDF, Word, Excel, text, images of scans', icon: 'attach_file', run: () => acts.attach() }, up && { label: 'Add a folder', sub: 'Every readable file in it, up to 50', icon: 'create_new_folder', run: () => acts['attach-folder']() }, up && '-',
-    { label: 'Use an agent', sub: 'A helper set up for one job', icon: 'smart_toy', run: () => agentMenu(el) }, { label: 'Saved prompts', icon: 'bookmark_border', run: () => acts.prompts(el) },
-    { label: 'Options', sub: 'Where answers come from, effort, model, abilities', icon: 'tune', run: () => { const o = G.chat || G.newOpts; menu(el, [{ heading: 'For this chat' }, !assistantOf(o.assistantId) && { label: 'Answer from', sub: colsLabel(o.sources), icon: 'library_books', run: () => acts['pick-sources'](el) }, { label: 'Model', sub: (outsideOf((G.chat ? G.chat.model : G.newOpts.model)) || { name: (G.chat ? G.chat.model : G.newOpts.model) || S.boot.app.config.defaultModel }).name, icon: 'memory', run: () => acts['pick-model'](el) }, { label: 'Abilities', sub: 'Calculator, checks, tables, browser', icon: 'extension', run: () => pluginMenu(el) }, { label: 'Connected systems', sub: 'Tools from your own systems', icon: 'hub', run: () => connectorMenu(el) }]); } },
-    '-', { label: 'Commands', sub: 'Type / in the box', icon: 'terminal', run: () => helpBox() }]);
+    { label: 'Answer from', sub: colsLabel(o.sources), icon: 'library_books', run: () => acts['pick-sources'](el) }, '-', { label: 'Commands', sub: 'Type / in the box', icon: 'terminal', run: () => helpBox() }]);
 };
 acts.mic = () => {
   const B = S.boot;
@@ -151,6 +151,7 @@ acts.mic = () => {
   r.start(); G.listening = true; rerender();
 };
 async function setOpt(patch) { if (G.chat) { G.chat = await api('PATCH', '/api/chats/' + G.chat.id, patch); } else Object.assign(G.newOpts, patch); rerender(); }
+acts['file-share'] = el => menu(el, [{ heading: 'Share with' }, ...S.boot.collections.filter(k => k.canWrite).map(k => ({ label: k.name, sub: 'Everyone with this collection can then ask about it', icon: 'folder_open', run: async () => { try { await api('POST', `/api/documents/${el.dataset.id}/share`, { collectionId: k.id }); toast('Shared with ' + k.name + '.'); await refresh(); } catch (e) { toast(e.message, 'err'); } } }))]);
 acts['pick-sources'] = el => {
   const B = S.boot, cur = (G.chat || G.newOpts).sources, mine = B.collections.filter(c => B.gptCollectionIds.includes(c.id));
   menu(el, [{ heading: 'Answer from' }, { label: 'All knowledge', icon: 'library_books', on: cur === 'all', run: () => setOpt({ sources: 'all' }) },
@@ -336,6 +337,7 @@ acts['msg-down'] = el => {
 };
 
 // ---------- chat pages
+function starters() { if (G.startersFor !== S.userId) { G.startersFor = S.userId; G.starters = []; api('GET', '/api/gpt/starters').then(r => { G.starters = r; if (r.length) rerender(); }).catch(() => {}); } return G.starters; }
 function pageNew(assistantId) {
   const B = S.boot;
   G.chat = null; G.chatId = null; G.newOpts.assistantId = assistantId && assistantOf(assistantId) ? assistantId : null;
@@ -348,7 +350,7 @@ function pageNew(assistantId) {
       ${composer()}
       ${as && as.workflow ? `<p style="text-align:center;margin-top:14px"><a class="btn ghost" href="#/gpt/flows/new/${as.workflow}">${icon('fact_check')}Run the full check on files</a></p>` : ''}
       <div class="starters">${as ? as.starters.map(s => `<button class="tag" style="padding:7px 12px" data-act="send" data-text="${esc(s)}">${esc(s)}</button>`).join('') : ''}</div>
-      ${as ? '' : `<div class="jobs">${B.assistants.filter(a => (a.starters || []).length).slice(0, 3).map(a => `<button class="job" data-act="job" data-id="${a.id}" data-text="${esc(a.starters[0])}"><span class="avatar sq">${icon(a.icon || 'smart_toy')}</span><span class="grow"><span class="small muted">${esc(a.name)}</span><b>${esc((a.starters[0][0] === '/' ? a.description : a.starters[0]).slice(0, 96))}</b></span>${icon('arrow_forward')}</button>`).join('')}</div>`}
+      ${as ? '' : `<div class="jobs">${starters().map(q => `<button class="job" data-act="send" data-text="${esc(q.text)}"><span class="avatar sq">${icon('library_books')}</span><span class="grow"><span class="small muted">From ${esc(q.from)}</span><b>${esc(q.text)}</b></span>${icon('arrow_forward')}</button>`).join('')}</div>`}
     </div></div>`);
 }
 function pageChat(id) {

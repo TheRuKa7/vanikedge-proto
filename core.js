@@ -1,4 +1,5 @@
 // Shared state, API client and small UI helpers used by both the Vanik OS console and the VanikGPT app.
+import { menuInScope } from './scope.js';
 export const S = { boot: null, userId: localStorage.getItem('vnk.user') || '' };
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -90,7 +91,7 @@ export function menu(anchor, items) {
   const again = Date.now() - menuShut < 400; menuShut = 0;
   closeMenu(); if (again) return; // a second click on the same button only closes
   const m = document.createElement('div'); m.className = 'menu'; m.setAttribute('role', 'menu');
-  for (const it of items) {
+  for (const it of menuInScope(items)) {
     if (!it) continue;
     if (it === '-') { m.appendChild(document.createElement('hr')); continue; }
     if (it.heading) { const d = document.createElement('div'); d.className = 'mlabel'; d.textContent = it.heading; m.appendChild(d); continue; }

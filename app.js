@@ -1,5 +1,6 @@
 // Router and sign-in. Routes: #/os/... is the Vanik OS console, #/gpt/... is the VanikGPT app.
 import { S, $, esc, chip, initials, LOGO, api, load, setRenderer, acts, applyTheme, ROLE, toast } from './core.js';
+import { inScope, scopeHome } from './scope.js';
 import { osPage, osRouteChanged } from './os.js';
 import { gptPage, gptAfterRender, gptRouteChanged } from './gpt.js';
 import { platformPage, platformRouteChanged } from './platform.js';
@@ -33,6 +34,7 @@ async function render() {
     const root = $('#root'), hash = location.hash || '';
     if (!S.userId) { if (!accounts) accounts = await api('GET', '/api/accounts'); root.innerHTML = signinPage(); return; }
     if (!S.boot) await load();
+    if (!inScope(hash)) { location.replace(scopeHome(hash)); return; }
     const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
     let html = null;
     if (parts[0] === 'app') html = suiteAppPage(parts.slice(1));

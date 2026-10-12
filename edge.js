@@ -52,7 +52,7 @@ acts.pw = el => { const v = el.dataset.v;
 // Adds the pieces above to the page a person asked for.
 export function edgeDecorate(parts, html) {
   if (!S.boot || !S.boot.admin || typeof html !== 'string') return html;
-  if (parts[0] === 'people') { need(); return html.replace(/(<div class="page-head">.*)/, m => m + directoryCard()); }
+  // the company directory card comes after the MVP: people are invited by email or link
   return html;
 }
 

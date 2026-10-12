@@ -34,7 +34,7 @@ const crypto_ = {
 };
 
 // ---- other stand-ins
-const DBKEY = 'db-v16'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
+const DBKEY = 'db-v17'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
 let dbText = null, handler = null;
 const fs_ = { existsSync: p => /db\.json$/.test(p) && dbText !== null, readFileSync: () => dbText, writeFileSync: (p, t) => { if (/db\.json$/.test(p)) { dbText = t; kvSet(DBKEY, t); } }, mkdirSync() {}, statSync() { throw new Error('no files here'); }, readdirSync() { throw new Error('no files here'); }, mkdtempSync: p => p + 'x', rmSync() {}, unlinkSync() {}, createReadStream() { throw new Error('no files here'); } };
 const path_ = { join: (...a) => a.join('/').replace(/\/+/g, '/'), normalize: p => p, resolve: (...a) => a.join('/'), dirname: p => p.replace(/\/[^/]*$/, ''), extname: p => (p.match(/\.[^./]+$/) || [''])[0], relative: (a, b) => b.replace(a, '').replace(/^\//, '') };

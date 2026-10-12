@@ -13,6 +13,9 @@ if (fs.existsSync(envFile)) for (const l of fs.readFileSync(envFile, 'utf8').spl
 const PORT = +process.env.PORT || 4320;
 const GW = { url: (process.env.VANIK_GATEWAY_URL || '').replace(/\/+$/, ''), key: process.env.VANIK_GATEWAY_KEY || '', model: process.env.VANIK_GATEWAY_MODEL || '', ok: false, checkedAt: null };
 const DEMO = process.env.VANIK_DEMO === '1' || (process.argv || []).includes('--demo'); // start with the sample workspace
+const MVP = process.env.VANIK_SCOPE !== 'full'; // the MVP release: VanikGPT answers from the model and documents only. Abilities, agents and tools run when VANIK_SCOPE=full
+let seeding = false; // the sample workspace is written with every feature on, so later releases can show it
+const mvpChat = c => !MVP || (!c.assistantId && !(c.messages || []).some(m => (m.activity || []).length)); // sample chats that used an agent or a tool are not listed in the MVP
 const DBF = process.env.VANIK_DB || path.join(DATA, 'db.json');
 
 const uid = p => p + '_' + crypto.randomBytes(5).toString('hex');
@@ -345,7 +348,7 @@ function bootstrap(u) {
     collections: (admin ? db.collections : db.collections.filter(c => allowed(c.access, u))).map(c => ({ ...collectionView(c), canWrite: WK.canWrite(u, c) })),
     gptCollectionIds: gptCollections(u).map(c => c.id),
     assistants: db.assistants.filter(x => canSeeAssistant(u, x)),
-    chats: db.chats.filter(c => c.userId === u.id && !c.temp && !c.archived).sort((x, y) => y.updatedAt.localeCompare(x.updatedAt)).map(chatRow),
+    chats: db.chats.filter(c => c.userId === u.id && !c.temp && !c.archived && mvpChat(c)).sort((x, y) => y.updatedAt.localeCompare(x.updatedAt)).map(chatRow),
     folders: db.folders.filter(f => f.userId === u.id), flags: PA.flags(), outsideModels: ED.outsideOn(), network: admin && db.edge ? db.edge.network : null,
     users: admin ? db.users : db.users.map(x => ({ id: x.id, name: x.name })),
     teams: [...new Set(db.users.flatMap(x => x.teams || []))].sort(),
@@ -496,6 +499,25 @@ on('DELETE', '/api/collections/:id', ({ u, p }) => {
   db.assistants.forEach(a => { if (Array.isArray(a.collections)) a.collections = a.collections.filter(i => i !== c.id); });
   audit(u, 'Deleted a collection', c.name); return { ok: true };
 }, A);
+// MVP: first questions from the documents of the person's own team, and sharing a chat file with a team collection
+on('GET', '/api/gpt/starters', ({ u }) => {
+  needGpt(u);
+  const cols = gptCollections(u), team = cols.filter(c => c.access && c.access.mode === 'restricted' && (c.access.teams || []).some(t => (u.teams || []).includes(t))), ids = (team.length ? team : cols).map(c => c.id);
+  const docs = db.documents.filter(d => ids.includes(d.collectionId) && !d.waiting).sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1)).slice(0, 3), ask = ['What are the main points of', 'What do I need to do under', 'Summarise in five lines:'];
+  return docs.map((d, i) => ({ text: `${ask[i]} ${d.name.replace(/\.[a-z0-9]+$/i, '')}${i < 2 ? '?' : ''}`, from: (db.collections.find(c => c.id === d.collectionId) || {}).name || 'your documents' }));
+});
+on('POST', '/api/documents/:id/share', ({ u, p, body }) => {
+  needGpt(u);
+  const d = byId(db.documents, p.id, 'Document');
+  if (!String(d.collectionId).startsWith('chat:')) throw err(400, 'Only a file attached to a chat can be shared this way.');
+  myChat(u, d.collectionId.slice(5));
+  const c = byId(db.collections, (body || {}).collectionId, 'Collection');
+  if (!WK.canWrite(u, c)) throw err(403, 'You cannot add to this collection. Ask an admin to let you.');
+  if (db.documents.some(x => x.collectionId === c.id && x.name === d.name)) throw err(409, `"${d.name}" is already in ${c.name}.`);
+  const copy = { ...d, id: uid('doc'), collectionId: c.id, chunks: d.chunks.map(k => ({ ...k, id: uid('chk') })), uploadedBy: u.name, uploadedAt: now() };
+  db.documents.push(copy); c.updatedAt = now(); audit(u, 'Shared a chat file with a collection', d.name, c.name);
+  return docView(copy);
+});
 on('GET', '/api/collections/:id/documents', ({ u, p }) => { const c = byId(db.collections, p.id, 'Collection'); if (!allowed(c.access, u)) throw err(403, 'You do not have access to this collection.'); return db.documents.filter(d => d.collectionId === c.id).map(docView); });
 on('POST', '/api/collections/:id/documents', ({ u, p, body }) => { const c = byId(db.collections, p.id, 'Collection'); if (!WK.canWrite(u, c)) throw err(403, 'You cannot add to this collection. Ask an admin to let you.'); const d = addDocument(u, c.id, body); c.updatedAt = now(); audit(u, 'Added a document', d.name, c.name); return docView(d); });
 on('DELETE', '/api/documents/:id', ({ u, p }) => {
@@ -723,7 +745,7 @@ async function answer(u, c, body, send, ctl, script) {
   const py = (typed || userMsg.content).match(/^\/py\s+([\s\S]+)/i);
   if (py && !resume) { msg.mode = 'tool'; msg.model = null; msg.content = '```python\n' + py[1].trim() + '\n```'; act({ id: uid('act'), kind: 'tool', tool: 'code', label: 'Python', state: 'done', result: 'Press Run. It runs in your browser, not on the appliance.' }); send('delta', { t: msg.content }); return finish(); }
   // Plugins first: exact tools and the sandboxed browser.
-  const on = (cfg.tools.enabled || []).filter(t => (as ? (as.tools || []).includes(t) : !Array.isArray(c.plugins) || c.plugins.includes(t))).filter(t => allowed(db.pluginAccess[t], u));
+  const on = (MVP && !seeding ? [] : cfg.tools.enabled || []).filter(t => (as ? (as.tools || []).includes(t) : !Array.isArray(c.plugins) || c.plugins.includes(t))).filter(t => allowed(db.pluginAccess[t], u));
   const slash = resume ? null : (typed || userMsg.content).match(/^\/(\w+)/), want = slash && AG.PLUGINS.find(p => p.slash === slash[1].toLowerCase());
   if (want && !on.includes(want.id)) { msg.mode = 'tool'; msg.model = null; msg.content = cfg.tools.enabled.includes(want.id) && !allowed(db.pluginAccess[want.id], u) ? `You do not have access to the ${want.name} ability. An admin decides who can use it.` : `The ${want.name} ability is turned off ${as ? 'for this agent' : 'here'}.`; send('delta', { t: msg.content }); return finish(); }
   // Plugins work on the text as typed, on the device. In mask mode the IDs are shortened in everything that is stored or sent on.
@@ -844,10 +866,11 @@ Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, 
 const call = async (u, m, p, body) => { let match; const r = routes.find(x => x.m === m && (match = p.match(x.re))); if (!r) throw err(404, 'Not found: ' + p); return r.fn({ u, body: body || {}, p: match.groups || {}, q: new URLSearchParams(), req: { headers: {} }, res: { headersSent: false, setHeader() {}, writeHead() {}, end() {} } }); };
 const quiet = { signal: new AbortController().signal, closed: () => false };
 let ready = Promise.resolve();
-if (DEMO && !db.sample) ready = require('./sample').seed({ db, call, audit, uid, ask: (u, c, body, script) => answer(u, c, body, () => {}, quiet, script), attach: (u, c, b) => addDocument(u, 'chat:' + c.id, b),
+seeding = DEMO && !db.sample;
+if (DEMO && !db.sample) ready = require('./sample').seed({ mvp: MVP, db, call, audit, uid, ask: (u, c, body, script) => answer(u, c, body, () => {}, quiet, script), attach: (u, c, b) => addDocument(u, 'chat:' + c.id, b),
   fastDeploy: () => { const d = db.app.deploys[0]; if (d && !d.result) { d.t0 = new Date(Date.now() - 120000).toISOString(); tick(); } } }).then(save, e => { console.error('Sample workspace:', e); });
 
-ready = ready.then(() => { if (DEMO && db.sample) { SU.sample(); RL.sample(); SN.sample(); PL.sample(); save(); } }); // the other five apps and their sample content
+ready = ready.then(() => { seeding = false; if (DEMO && db.sample) { SU.sample(); RL.sample(); SN.sample(); PL.sample(); save(); } }); // the other five apps and their sample content
 
 // ---------- http
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon' };

@@ -311,6 +311,7 @@ async function seed(x) {
 
     // chats. Tools run for real. Where a model would write, the sample answer is given, with the passages the search really found.
     const chat = async (b, day, turns, o = {}) => {
+      if (x.mvp) { if (b.assistantId) return null; turns = turns.filter(tn => tn.q && !tn.q.startsWith('/')); } // the MVP's sample chats are plain questions over documents
       const c = await call(owner, 'POST', '/api/chats', b), full = db.chats.find(q => q.id === c.id); let t = 0;
       for (const turn of turns) {
         if (turn.file) { await attach(owner, full, { name: turn.file, type: turn.file.split('.').pop(), size: DOC[turn.file].length, pages: [DOC[turn.file]] }); continue; }
