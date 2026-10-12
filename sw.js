@@ -34,7 +34,7 @@ const crypto_ = {
 };
 
 // ---- other stand-ins
-const DBKEY = 'db-v17'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
+const DBKEY = 'db-v18'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
 let dbText = null, handler = null;
 const fs_ = { existsSync: p => /db\.json$/.test(p) && dbText !== null, readFileSync: () => dbText, writeFileSync: (p, t) => { if (/db\.json$/.test(p)) { dbText = t; kvSet(DBKEY, t); } }, mkdirSync() {}, statSync() { throw new Error('no files here'); }, readdirSync() { throw new Error('no files here'); }, mkdtempSync: p => p + 'x', rmSync() {}, unlinkSync() {}, createReadStream() { throw new Error('no files here'); } };
 const path_ = { join: (...a) => a.join('/').replace(/\/+/g, '/'), normalize: p => p, resolve: (...a) => a.join('/'), dirname: p => p.replace(/\/[^/]*$/, ''), extname: p => (p.match(/\.[^./]+$/) || [''])[0], relative: (a, b) => b.replace(a, '').replace(/^\//, '') };
@@ -46,7 +46,7 @@ const BufferLike = { concat: parts => ({ toString: () => dec.decode(new Uint8Arr
 const cache = {};
 async function boot() {
   dbText = (await kvGet(DBKEY)) ?? null;
-  const src = {}; for (const f of ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'plane']) src[f] = await (await fetch(`${BASE}/node/${f}.js`, { cache: 'no-cache' })).text();
+  const src = {}; for (const f of ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'sense_insight', 'plane']) src[f] = await (await fetch(`${BASE}/node/${f}.js`, { cache: 'no-cache' })).text();
   const req = name => { if (mods[name]) return mods[name]; const f = name.replace('./', ''); if (!cache[f]) { const module = { exports: {} }; cache[f] = module; run(src[f], module); } return cache[f].exports; };
   const run = (code, module) => new Function('require', 'module', 'exports', 'process', '__dirname', 'Buffer', 'setInterval', 'setTimeout', 'clearTimeout', 'clearInterval', 'console', code)(req, module, module.exports, { env: { VANIK_DEMO: '1' }, argv: [], on() {}, execPath: '' }, '/app', BufferLike, timer(setInterval), timer(setTimeout), clear(clearTimeout), clear(clearInterval), { log() {}, error: (...a) => console.error(...a) });
   run(src.server, { exports: {} });
