@@ -2,6 +2,7 @@
 // The server files are loaded as text and given small stand-ins for http, fs, crypto, path, os and child_process.
 // State is kept in this browser (IndexedDB). Nothing is sent anywhere.
 const BASE = new URL('./', self.location).pathname.replace(/\/$/, '');
+const BUILD = '20261012104357'; // set by build_demo.mjs; the page carries the same mark
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 // ---- storage: one JSON document
@@ -74,5 +75,7 @@ self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (u.origin !== self.location.origin || !u.pathname.startsWith(BASE + '/')) return;
   const p = u.pathname.slice(BASE.length);
+  if (p === '/__build') return e.respondWith(new Response(BUILD, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } })); // the page asks which build is in charge
+  if (e.request.method === 'GET' && !p.startsWith('/api/') && !p.startsWith('/gateway/')) return e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).catch(() => fetch(e.request))); // pages and scripts are checked against the site every time, so nobody runs a mix of old and new
   if (p.startsWith('/api/') || p.startsWith('/gateway/')) e.respondWith(serve(e.request, p, u.search).catch(err => new Response(JSON.stringify({ error: 'The preview could not start: ' + err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } })));
 });

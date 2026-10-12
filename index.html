@@ -21,10 +21,19 @@
     window.fetch = (u, o) => realFetch(typeof u === 'string' && (u.startsWith('/api/') || u.startsWith('/gateway/')) ? BASE + u : u, o);
     (async () => {
       if (!('serviceWorker' in navigator)) { document.getElementById('root').textContent = 'This preview needs a browser with service workers.'; return; }
-      await navigator.serviceWorker.register('sw.js');
+      const BUILD = '20261012104357', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
+      const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
       await navigator.serviceWorker.ready;
-      if (!navigator.serviceWorker.controller) await new Promise(r => navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }));
-      import('./app.js');
+      if (!navigator.serviceWorker.controller) await changed();
+      // Someone who has been here before may still have the worker of an older build, which would answer this page
+      // with the older server. Ask the worker which build it is; if it is not this one, bring the new one in and start again.
+      const theirs = await realFetch(BASE + '/__build', { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')).catch(() => '');
+      if (theirs !== BUILD && sessionStorage.getItem('vnk.build') !== BUILD) {
+        sessionStorage.setItem('vnk.build', BUILD);
+        const swap = changed(); await reg.update().catch(() => {}); await swap;
+        return location.reload();
+      }
+      import('./app.js?b=' + BUILD);
     })();
   </script>
 </body>
