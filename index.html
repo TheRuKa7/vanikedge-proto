@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="mvp.css">
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><p class="boot" style="font:14px/1.5 system-ui,sans-serif;color:#6b7280;text-align:center;margin-top:28vh">Opening Vanik Edge…</p></div>
   <script src="vanik-ui.js"></script>
   <script>
     // Preview build: the server runs in this browser. Send API calls to it and wait until it is in control.
@@ -21,7 +21,9 @@
     window.fetch = (u, o) => realFetch(typeof u === 'string' && (u.startsWith('/api/') || u.startsWith('/gateway/')) ? BASE + u : u, o);
     (async () => {
       if (!('serviceWorker' in navigator)) { document.getElementById('root').textContent = 'This preview needs a browser with service workers.'; return; }
-      const BUILD = '20261012104357', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
+      const say = t => { const b = document.querySelector('#root .boot'); if (b) b.textContent = t; };
+      say('Starting the preview. The first time takes a few seconds.');
+      const BUILD = '20261012104654', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
       const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
       await navigator.serviceWorker.ready;
       if (!navigator.serviceWorker.controller) await changed();
@@ -30,10 +32,11 @@
       const theirs = await realFetch(BASE + '/__build', { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')).catch(() => '');
       if (theirs !== BUILD && sessionStorage.getItem('vnk.build') !== BUILD) {
         sessionStorage.setItem('vnk.build', BUILD);
+        say('Getting the latest version…');
         const swap = changed(); await reg.update().catch(() => {}); await swap;
         return location.reload();
       }
-      import('./app.js?b=' + BUILD);
+      import('./app.js?b=' + BUILD).catch(e => { say('The preview could not start: ' + e.message + '. Reload the page.'); });
     })();
   </script>
 </body>

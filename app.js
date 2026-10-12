@@ -49,7 +49,11 @@ async function render() {
     root.classList.remove('fresh'); if (moved) { void root.offsetWidth; root.classList.add('fresh'); } // entry motion only when the page changes, not on every redraw
     const ns = $('#scroll'); if (ns && keep) ns.scrollTop = keep;
     gptAfterRender(); applyFlags();
-  } catch (e) { if (S.userId) toast(e.message, 'err'); }
+  } catch (e) {
+    if (S.userId) toast(e.message, 'err');
+    const root = $('#root'); // never leave an empty page: say what happened and offer a way on
+    if (root && (!root.innerHTML.trim() || root.querySelector('.boot'))) root.innerHTML = `<div class="center-page"><div class="card" style="text-align:center"><h2>This page could not open</h2><p class="muted" style="margin:8px 0 18px">${esc(e.message || 'Something went wrong.')}</p><div class="row" style="justify-content:center"><button class="btn" onclick="location.reload()">Try again</button><button class="btn ghost" onclick="location.hash='#/';location.reload()">Go to the start</button></div></div></div>`;
+  }
   finally { busy = false; if (again) { again = false; render(); } }
 }
 setRenderer(render);
