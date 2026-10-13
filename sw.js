@@ -2,7 +2,7 @@
 // The server files are loaded as text and given small stand-ins for http, fs, crypto, path, os and child_process.
 // State is kept in this browser (IndexedDB). Nothing is sent anywhere.
 const BASE = new URL('./', self.location).pathname.replace(/\/$/, '');
-const BUILD = '20261013054707'; // set by build_demo.mjs; the page carries the same mark
+const BUILD = '20261013064947'; // set by build_demo.mjs; the page carries the same mark
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 // ---- storage: one JSON document
@@ -35,7 +35,7 @@ const crypto_ = {
 };
 
 // ---- other stand-ins
-const DBKEY = 'db-v19'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
+const DBKEY = 'db-v20'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
 let dbText = null, handler = null;
 const fs_ = { existsSync: p => /db\.json$/.test(p) && dbText !== null, readFileSync: () => dbText, writeFileSync: (p, t) => { if (/db\.json$/.test(p)) { dbText = t; kvSet(DBKEY, t); } }, mkdirSync() {}, statSync() { throw new Error('no files here'); }, readdirSync() { throw new Error('no files here'); }, mkdtempSync: p => p + 'x', rmSync() {}, unlinkSync() {}, createReadStream() { throw new Error('no files here'); } };
 const path_ = { join: (...a) => a.join('/').replace(/\/+/g, '/'), normalize: p => p, resolve: (...a) => a.join('/'), dirname: p => p.replace(/\/[^/]*$/, ''), extname: p => (p.match(/\.[^./]+$/) || [''])[0], relative: (a, b) => b.replace(a, '').replace(/^\//, '') };
@@ -47,7 +47,7 @@ const BufferLike = { concat: parts => ({ toString: () => dec.decode(new Uint8Arr
 const cache = {};
 async function boot() {
   dbText = (await kvGet(DBKEY)) ?? null;
-  const src = {}, names = ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'sense_insight', 'sense_setup', 'plane'];
+  const src = {}, names = ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'sense_insight', 'sense_setup', 'gpt_setup', 'plane'];
   (await Promise.all(names.map(f => fetch(`${BASE}/node/${f}.js`, { cache: 'no-cache' }).then(r => r.text())))).forEach((t, i) => { src[names[i]] = t; }); // all at once: the start is several seconds shorter
   const req = name => { if (mods[name]) return mods[name]; const f = name.replace('./', ''); if (!cache[f]) { const module = { exports: {} }; cache[f] = module; run(src[f], module); } return cache[f].exports; };
   const run = (code, module) => new Function('require', 'module', 'exports', 'process', '__dirname', 'Buffer', 'setInterval', 'setTimeout', 'clearTimeout', 'clearInterval', 'console', code)(req, module, module.exports, { env: { VANIK_DEMO: '1' }, argv: [], on() {}, execPath: '' }, '/app', BufferLike, timer(setInterval), timer(setTimeout), clear(clearTimeout), clear(clearInterval), { log() {}, error: (...a) => console.error(...a) });

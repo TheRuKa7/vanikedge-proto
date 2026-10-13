@@ -7,7 +7,7 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
   const DEPTS = ['Sales', 'Customer support', 'Operations', 'Procurement', 'HR and people', 'Finance', 'IT', 'Engineering', 'Product', 'Marketing', 'Legal', 'Leadership', 'Other'];
   const LEVELS = ['Individual contributor', 'Manager', 'Senior leader'];
   const GOALS = ['Capture actions and who owns them', 'Stop taking notes by hand', 'Catch up on meetings I missed', 'Understand customer calls', 'See patterns across many meetings', 'Draft follow-ups', 'Share minutes with my team'];
-  const CAPTURE = ['teams', 'upload', 'desktop'];
+  const CAPTURE = ['teams', 'upload', 'desktop', 'mic'];
   const SYSTEMS = ['Keka', 'Darwinbox', 'Zoho People', 'greytHR', 'HROne', 'FlexiEle', 'SAP SuccessFactors', 'Workday', 'BambooHR', 'Microsoft Entra ID', 'Google Workspace'];
   const DEFAULTS = { team: { reach: 'off', detail: 'minutes', dotted: false, never: ['One to one', 'Hiring interview'] }, notice: true, skip: [], upload: true, external: false, exportOn: true, keepDays: 0, score: true };
   S.profile = S.profile || {}; S.org = S.org || { people: [], source: '', at: '', by: '' };
@@ -90,13 +90,15 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
       if (body.level !== undefined) { if (!LEVELS.includes(body.level)) throw err(400, 'Pick your role.'); p.level = body.level; }
       if (Array.isArray(body.goals)) p.goals = body.goals.filter(g => GOALS.includes(g));
       if (body.capture !== undefined) { if (!CAPTURE.includes(body.capture)) throw err(400, 'Pick how your meetings reach Vanik Sense.'); p.capture = body.capture; }
-      if (body.basics) p.basics = true; if (body.done) { if (!p.dept || !p.level) throw err(400, 'Two answers are still missing.'); p.done = true; }
+      if (body.basics) p.basics = true; ['transcribe', 'mic', 'desktopNotify'].forEach(k => { if (body[k] !== undefined) p[k] = !!body[k]; }); if (body.done) { if (!p.dept || !p.level) throw err(400, 'Two answers are still missing.'); p.done = true; }
       return p; });
-    on('GET', '/api/sense/setup', ({ u }) => { need(u, 'sense'); const p = S.profile[u.id] || {}, c = helpers.connOf(u), mine = helpers.count(u), adm = isAdmin(u);
+    on('GET', '/api/sense/setup', ({ u }) => { need(u, 'sense'); const p = S.profile[u.id] || {}, c = helpers.connOf(u), mine = helpers.count(u), adm = isAdmin(u), cap = p.capture || 'teams';
       const steps = [{ key: 'profile', label: 'Tell Vanik Sense how you work', done: !!p.done, href: '#/app/sense/welcome', cta: 'Start' }, { key: 'calendar', label: 'Connect your calendar', done: c.some(x => (x.key === 'calendar' || x.key === 'gcal') && x.on), href: '#/app/sense/settings', cta: 'Connect' },
+        // the step that makes capture work, by the way the person chose: Teams needs transcription switched on before the meeting
+        ...(cap === 'teams' ? [{ key: 'transcribe', label: 'Switch on transcription in Teams', done: !!p.transcribe || mine > 0, act: 'ss-guide', cta: 'Show me' }] : cap === 'mic' ? [{ key: 'mic', label: 'Let this browser use the microphone', done: !!p.mic, act: 'ss-mic', cta: 'Allow' }] : cap === 'desktop' ? [{ key: 'desktop', label: 'Desktop app: get told when it is ready', done: !!p.desktopNotify, act: 'ss-desktop', cta: 'Open' }] : []),
         { key: 'first', label: 'Get your first meeting in', done: mine > 0, href: '#/app/sense/meetings', cta: 'Add one' }, { key: 'basics', label: 'Learn the basics in one minute', done: !!p.basics, act: 'ss-basics', cta: 'Show me' },
         ...(adm ? [{ key: 'org', label: 'Load your reporting lines', done: S.org.people.length > 0, href: '#/app/sense/admin', cta: 'Open', admin: true }] : [])];
-      return { steps, left: steps.filter(s => !s.done).length, dept: p.dept || '', level: p.level || '', capture: p.capture || '', manager: managerOf(u), watchers: watchers(u), team: teamIds(u).size, rule: { reach: P().team.reach, detail: P().team.detail, never: P().team.never } }; });
+      return { steps, left: steps.filter(s => !s.done).length, dept: p.dept || '', level: p.level || '', capture: p.capture || '', transcribe: !!p.transcribe, manager: managerOf(u), watchers: watchers(u), team: teamIds(u).size, rule: { reach: P().team.reach, detail: P().team.detail, never: P().team.never } }; });
     on('GET', '/api/sense/admin', ({ u }) => { need(u, 'sense'); guard(u); return { policy: P(), org: orgView(), admins: admins(), systems: SYSTEMS, types: TYPES, tenantAdmin: u.role !== 'user' }; });
     on('PUT', '/api/sense/admin', ({ u, body }) => { need(u, 'sense'); guard(u); const p = cleanPolicy(body || {}); audit(u, 'Changed Vanik Sense settings', Object.keys(body || {}).join(', '), 'Vanik Sense'); return { policy: p }; });
     on('GET', '/api/sense/org', ({ u }) => { need(u, 'sense'); guard(u); return { ...orgView(), rows: tree() }; });

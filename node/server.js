@@ -31,6 +31,7 @@ const defaultConfig = () => ({
   safety: { pii: 'mask', retentionDays: 0, uploads: true, blockedTopics: [], maskDocuments: false, dailyLimit: 0, voice: false, adminChats: false },
   tools: { enabled: ['calculator', 'gst', 'tables', 'browser', 'screen'], browserMode: 'allowed', sites: [], signins: [] },
   advanced: { port: 9016, offline: true, telemetry: false, corsOrigin: '' },
+  followHub: MVP, link: { mode: 'gateway', url: '', model: '', keySet: false }, web: { on: false, credits: 200 },
 });
 const freshApp = () => ({ status: 'not_installed', port: 9016, image: 'vanik-gpt:v0.11.4-vanik.2', needsGb: 1.6, installedAt: null, installedBy: null, config: defaultConfig(), versions: [], deployedVersion: null, deploys: [] });
 function seed() {
@@ -66,6 +67,7 @@ const PL = { keyGate: () => null, sample() {} };
 const RL = { sample() {} };
 const SN = { sample() {}, fromTranscript: () => '' };
 const SU = { usedGb: () => 0, boot: () => null, sample() {}, canUse: () => false, apps: () => [] };
+const GS = { follow() {}, follows: () => false, custom: () => false, published: () => true, usable: () => true, teams: () => [], boot: () => null, search: () => null };
 const ED = { outsideOn: () => [], isOutside: () => false, callLimit: () => 10, sendsDocs: () => false, askOutside: async () => {} };
 const SYSTEM = { id: 'system', name: 'Vanik OS', role: 'owner', teams: [] };
 const FX = { emit() {}, issueKey() {}, revokeSystemKeys() {}, pendingApprovals: () => 0, failedDeliveries: () => 0 };
@@ -302,7 +304,7 @@ function startDeploy(u, note) {
 const collectionView = c => { const docs = db.documents.filter(d => d.collectionId === c.id); return { ...c, docCount: docs.length, bytes: docs.reduce((a, d) => a + d.size, 0), passages: docs.reduce((a, d) => a + d.chunks.length, 0), embedded: docs.reduce((a, d) => a + d.chunks.filter(k => k.v).length, 0) }; };
 const docView = d => ({ id: d.id, collectionId: d.collectionId, name: d.name, size: d.size, type: d.type, pages: d.pageCount, paged: d.paged, chunks: d.chunks.length, uploadedBy: d.uploadedBy, uploadedAt: d.uploadedAt, purpose: d.purpose || '', expiresOn: d.expiresOn || '', restrict: d.restrict || [], pii: d.pii || [], ocr: !!d.ocr, embedded: d.chunks.filter(c => c.v).length, synced: !!d.source, waiting: !!d.waiting, note: !!d.note, transcribed: !!d.transcribed });
 const canUseGpt = u => db.app.status === 'running' && db.device.online && allowed(db.app.config.access, u);
-const gptCollections = u => { const sel = db.app.config.collections; return db.collections.filter(c => allowed(c.access, u) && (sel === 'all' || sel.includes(c.id))); };
+const gptCollections = u => { const sel = db.app.config.collections; return db.collections.filter(c => allowed(c.access, u) && GS.usable(c, 'vanikgpt') && (sel === 'all' || sel.includes(c.id))); };
 const canSeeAssistant = (u, a) => a.createdBy === u.id || (a.shared && allowed(a.access, u));
 const chatRow = c => ({ folderId: c.folderId || null, id: c.id, title: c.title, pinned: !!c.pinned, shared: !!c.shared, assistantId: c.assistantId || null, updatedAt: c.updatedAt, createdAt: c.createdAt });
 function attention() {
@@ -335,7 +337,7 @@ const probes = () => {
   ];
 };
 function bootstrap(u) {
-  tick(); tickCommands();
+  tick(); tickCommands(); GS.follow();
   const a = db.app, admin = isAdmin(u);
   return {
     tenant: db.tenant, me: u, admin,
@@ -345,13 +347,13 @@ function bootstrap(u) {
       versions: admin ? a.versions.map(v => ({ v: v.v, at: v.at, by: v.by, note: v.note, config: v.config })) : [], deploys: admin ? a.deploys.slice(0, 30).map(deployView) : [], deploy: deployView(a.deploys[0]) },
     gateway: { configured: !!GW.url, ok: GW.ok, checkedAt: GW.checkedAt },
     canUseGpt: canUseGpt(u),
-    collections: (admin ? db.collections : db.collections.filter(c => allowed(c.access, u))).map(c => ({ ...collectionView(c), canWrite: WK.canWrite(u, c) })),
+    collections: (admin ? db.collections : db.collections.filter(c => allowed(c.access, u) && GS.published(c))).map(c => ({ ...collectionView(c), canWrite: WK.canWrite(u, c) })),
     gptCollectionIds: gptCollections(u).map(c => c.id),
     assistants: db.assistants.filter(x => canSeeAssistant(u, x)),
     chats: db.chats.filter(c => c.userId === u.id && !c.temp && !c.archived && mvpChat(c)).sort((x, y) => y.updatedAt.localeCompare(x.updatedAt)).map(chatRow),
     folders: db.folders.filter(f => f.userId === u.id), flags: PA.flags(), outsideModels: ED.outsideOn(), network: admin && db.edge ? db.edge.network : null,
     users: admin ? db.users : db.users.map(x => ({ id: x.id, name: x.name })),
-    teams: [...new Set(db.users.flatMap(x => x.teams || []))].sort(),
+    teams: GS.teams(), gptSetup: GS.boot(admin),
     prompts: db.prompts.filter(q => q.shared || q.userId === u.id), attention: admin ? attention() : [],
     plugins: admin ? AG.PLUGINS : AG.PLUGINS.filter(p => allowed(db.pluginAccess[p.id], u)), toolConnectors: AG.mcpViews().filter(m => admin || allowed((db.mcp.find(x => x.id === m.id) || {}).access, u)), sample: !!db.sample, openTasks: WK.openTasks(u),
     suite: SU.boot(u),
@@ -482,13 +484,14 @@ on('POST', '/api/collections', ({ u, body }) => {
   const name = String(body.name || '').trim();
   if (!name) throw err(400, 'Give the collection a name.');
   if (db.collections.some(c => c.name.toLowerCase() === name.toLowerCase())) throw err(409, 'A collection with that name already exists.');
-  const c = { id: uid('col'), name, description: String(body.description || '').trim(), access: cleanAccess(body.access), createdBy: u.name, createdAt: now(), updatedAt: now() };
+  const c = { id: uid('col'), name, description: String(body.description || '').trim(), access: cleanAccess(body.access), state: body.state === 'draft' ? 'draft' : 'published', apps: GS.cleanApps(body.apps), createdBy: u.name, createdAt: now(), updatedAt: now() };
   db.collections.push(c); audit(u, 'Created a collection', name); return collectionView(c);
 }, A);
 on('PATCH', '/api/collections/:id', ({ u, p, body }) => {
   const c = byId(db.collections, p.id, 'Collection');
   if (body.name !== undefined) { const n = String(body.name).trim(); if (!n) throw err(400, 'Give the collection a name.'); c.name = n; }
   if (body.description !== undefined) c.description = String(body.description).trim();
+  if (body.apps !== undefined) { c.apps = GS.cleanApps(body.apps); audit(u, 'Changed which apps can use a knowledge base', c.name, c.apps === 'all' ? 'Every app' : c.apps.join(', ') || 'No app'); }
   if (body.access) { c.access = cleanAccess(body.access); audit(u, 'Changed who can use a collection', c.name, c.access.mode === 'everyone' ? 'Everyone' : 'Chosen people'); }
   c.updatedAt = now(); save(); return collectionView(c);
 }, A);
@@ -562,7 +565,9 @@ on('POST', '/api/app/install', ({ u }) => {
 on('PUT', '/api/app/config', ({ u, body }) => {
   const a = db.app, c = body.config || {}, d = defaultConfig();
   if (a.status === 'not_installed') throw err(400, 'Install VanikGPT first.');
-  const models = (c.models || []).filter(id => db.models.some(m => m.id === id && m.kind === 'chat'));
+  const link = GS.cleanLink(c.link, a.config.link), followHub = c.followHub === undefined ? GS.follows() : !!c.followHub, web = GS.cleanWeb(c.web || a.config.web);
+  // a custom endpoint has the one model it names; else, when models follow Model Hub, every serving chat model is offered and none is picked here
+  const models = link.mode === 'custom' ? [link.model] : followHub ? GS.served() : (c.models || []).filter(id => db.models.some(m => m.id === id && m.kind === 'chat'));
   const cfg = {
     models, defaultModel: models.includes(c.defaultModel) ? c.defaultModel : (models[0] || null), instructions: String(c.instructions || '').trim().slice(0, 4000),
     collections: c.collections === 'all' || !Array.isArray(c.collections) ? 'all' : c.collections.filter(id => db.collections.some(x => x.id === id)),
@@ -571,7 +576,8 @@ on('PUT', '/api/app/config', ({ u, body }) => {
       blockedTopics: [...new Set(((c.safety && c.safety.blockedTopics) || []).map(t => String(t).trim().toLowerCase()).filter(Boolean))].slice(0, 30), maskDocuments: !!(c.safety && c.safety.maskDocuments), dailyLimit: Math.max(0, Math.min(10000, Math.round(+(c.safety && c.safety.dailyLimit) || 0))), voice: !!(c.safety && c.safety.voice), adminChats: !!(c.safety && c.safety.adminChats) },
     tools: !c.tools ? d.tools : { enabled: (c.tools.enabled || []).filter(x => ['calculator', 'gst', 'tables', 'browser', 'screen'].includes(x)), browserMode: c.tools.browserMode === 'any' ? 'any' : 'allowed', sites: [...new Set((c.tools.sites || []).map(x => String(x).toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0]).filter(x => /^[a-z0-9.-]+$/.test(x)))].slice(0, 100),
       signins: (c.tools.signins || []).map(x => ({ host: String(x.host || '').toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0], kind: x.kind === 'sso' ? 'sso' : 'vault', account: String(x.account || '').trim().slice(0, 80) })).filter(x => /^[a-z0-9.-]+$/.test(x.host)).slice(0, 50) },
-    advanced: { port: Math.max(1024, Math.min(65535, +(c.advanced && c.advanced.port) || 9016)), offline: !(c.advanced && c.advanced.offline === false), telemetry: !!(c.advanced && c.advanced.telemetry), corsOrigin: String((c.advanced && c.advanced.corsOrigin) || '').trim() },
+    advanced: { port: Math.max(1024, Math.min(65535, +(c.advanced && c.advanced.port) || 9016)), offline: !web.on && !(c.advanced && c.advanced.offline === false), telemetry: !!(c.advanced && c.advanced.telemetry), corsOrigin: String((c.advanced && c.advanced.corsOrigin) || '').trim() },
+    followHub, link, web,
   };
   if (a.versions[0] && JSON.stringify(a.versions[0].config) === JSON.stringify(cfg)) return { v: a.versions[0].v, unchanged: true };
   const v = (a.versions[0] ? a.versions[0].v : 0) + 1;
@@ -688,7 +694,7 @@ const summarize = msgs => msgs.filter(m => m.content).map(m => (m.role === 'user
 // Effort: how many passages, how much history and how long an answer.
 const EFFORT = { quick: { k: 3, hist: 6, sent: 2, out: 0.5 }, balanced: { k: 5, hist: 10, sent: 4, out: 1 }, thorough: { k: 8, hist: 16, sent: 6, out: 1.5 } };
 async function answer(u, c, body, send, ctl, script) {
-  needGpt(u);
+  needGpt(u); GS.follow();
   const cfg = db.app.config, t0 = Date.now();
   let userMsg, resume = null, refused = false, typed = null;
   if (body.resume) {
@@ -742,6 +748,9 @@ async function answer(u, c, body, send, ctl, script) {
   const topic = resume ? null : (cfg.safety.blockedTopics || []).find(t => new RegExp('(^|[^\\p{L}\\p{N}])' + escRe(t) + '($|[^\\p{L}\\p{N}])', 'iu').test(userMsg.content));
   if (topic) { msg.mode = 'blocked'; msg.notice = 'blocked_topic'; msg.model = null; audit(u, 'Blocked a question', topic, 'Matches a blocked topic'); return finish(); }
 
+  // web search: only in a chat that has it on, only for a question that wants the web, and one credit a search
+  const web = resume ? null : GS.search(u, c, typed || userMsg.content);
+  if (web) { msg.mode = 'web'; msg.model = null; msg.web = web; msg.content = web.spent ? `This month's ${web.of} browsing credits are used up, so the web was not searched. An admin can add credits in the console.` : 'The web was searched for this, and one browsing credit was used.\n\nThis prototype has no internet, so it cannot show the pages. On an appliance the top pages are read, the model on the appliance writes the answer, and every page is listed as a source.'; send('delta', { t: msg.content }); return finish(); }
   const py = (typed || userMsg.content).match(/^\/py\s+([\s\S]+)/i);
   if (py && !resume) { msg.mode = 'tool'; msg.model = null; msg.content = '```python\n' + py[1].trim() + '\n```'; act({ id: uid('act'), kind: 'tool', tool: 'code', label: 'Python', state: 'done', result: 'Press Run. It runs in your browser, not on the appliance.' }); send('delta', { t: msg.content }); return finish(); }
   // Plugins first: exact tools and the sandboxed browser.
@@ -806,7 +815,7 @@ async function answer(u, c, body, send, ctl, script) {
   else if (GW.url && serving && !(T.stopped && !T.context.length)) {
     try { usageOut = await streamModel(model, [{ role: 'system', content: sysBase + passText }, ...recent.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: question }], t => { msg.content += t; send('delta', { t }); }, ctl.signal, { max: cap.output }); GW.ok = true; }
     catch (e) { if (!ctl.closed()) { GW.ok = false; GW.checkedAt = now(); msg.content = ''; msg.notice = 'model_unreachable'; } }
-  } else if (!usedTools) msg.notice = serving ? 'model_unreachable' : 'model_parked';
+  } else if (!usedTools) msg.notice = serving ? 'model_unreachable' : GS.custom() ? 'model_custom' : 'model_parked';
 
   if (!ctl.closed() && !msg.content) {
     let text = '';
@@ -860,6 +869,7 @@ Object.assign(SU, require('./suite')({ db, on, err, uid, now, audit, isAdmin, A,
 Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id), toSense: (...a) => SN.fromTranscript(...a) }));
 Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
 Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
+Object.assign(GS, require('./gpt_setup')({ db, on, err, now, audit, A, byId, MVP, save, needGpt, suiteApps: () => SU.apps() }));
 Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, probes, issueKey: (...a) => FX.issueKey(...a) }));
 
 // The sample workspace is built through the same routes a person uses, once, when the server starts with --demo.

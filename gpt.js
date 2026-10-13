@@ -4,6 +4,7 @@ import { hint } from './hints.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, go, bytes, ago, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, accessDrafts, accessPicker, accessLabel, pickFiles, downloadText, when, FILE_ACCEPT, LOGO } from './core.js';
 import { osShell, uploadFiles } from './os.js';
 
+import { webGate, webAsk, webAskCard, webNote } from './gpt_setup.js';
 const G = { chat: null, chatId: null, streaming: null, draftText: '', newOpts: { model: null, sources: 'all', assistantId: null, effort: 'balanced' }, slashOpen: false, listening: false, rec: null, catalog: null, search: '', searchRes: null, toBottom: false, focus: false, editOf: null, shared: null, sharedKey: '', docs: {}, doc: null, docKey: '', colDocs: {}, hitKey: '' };
 export const gptRouteChanged = () => { G.hitKey = ''; const c = G.chat; if (c && c.temp && location.hash !== '#/gpt/c/' + c.id) api('DELETE', '/api/chats/' + c.id).catch(() => {}); };
 export const sendText = async text => { G.draftText = text; await acts.send(); };
@@ -74,7 +75,8 @@ const colsLabel = v => { const B = S.boot, mine = B.collections.filter(c => B.gp
 function composer() {
   const B = S.boot, c = G.chat, o = c || G.newOpts, as = assistantOf(o.assistantId), model = (c ? c.model : (as && as.model) || G.newOpts.model) || B.app.config.defaultModel;
   const busy = G.streaming && (!c || G.streaming.chatId === c.id), files = c ? c.files || [] : [];
-  return `<div class="composer-wrap"><div id="uploads"></div><div class="composer" data-chatdrop>
+  const webOn = !!(B.gptSetup && B.gptSetup.web.on) && !as;
+  return `<div class="composer-wrap"><div id="uploads"></div>${webAsk.info && webAsk.chatId === (c ? c.id : null) ? webAskCard() : ''}<div class="composer" data-chatdrop>
     ${files.length ? `<div class="files">${files.map(f => `<span class="tag">${icon('description')}<a class="ellipsis" style="max-width:180px" href="#/gpt/source/${f.id}/-/${c.id}">${esc(f.name)}</a>${B.collections.some(k => k.canWrite) ? `<button class="tip-right" data-act="file-share" data-id="${f.id}" data-tip="Share with a team" aria-label="Share with a team">${icon('group_add')}</button>` : ''}<button data-act="file-remove" data-id="${f.id}" aria-label="Remove file">${icon('close')}</button></span>`).join('')}</div>` : ''}
     ${G.editOf ? `<div class="editing">${icon('edit')}<span class="grow">Editing an earlier question. Everything after it will be replaced.</span><button class="link" data-act="edit-cancel">Cancel</button></div>` : ''}
     <div id="slash">${slashHtml()}</div>
@@ -85,6 +87,7 @@ function composer() {
       ${(o.effort || 'balanced') !== 'balanced' ? `<button class="pick" data-act="pick-effort">${icon('speed')}<span>${EFFORT[o.effort][0]}</span></button>` : ''}
       ${model && model !== B.app.config.defaultModel ? `<button class="pick ${outsideOf(model) ? 'out' : ''}" data-act="pick-model">${icon(outsideOf(model) ? 'public' : 'memory')}<span class="ellipsis">${esc(outsideOf(model) ? outsideOf(model).name : model)}</span></button>` : ''}
       <span class="grow"></span>
+      ${webOn ? `<button class="icon-btn sm ${c && c.web ? 'on' : ''} tip-left" data-act="web-toggle" data-tip="${c && c.web ? 'Web search is on for this chat. It may use browsing credits.' : 'Search the web in this chat'}" aria-label="Web search" aria-pressed="${!!(c && c.web)}">${icon('travel_explore')}</button>` : ''}
       ${B.app.config.safety.voice ? '' : '<!--'}<button class="icon-btn sm ${G.listening ? 'on' : ''} tip-left" data-act="mic" data-tip="${G.listening ? 'Stop listening' : 'Speak instead of typing'}" aria-label="Voice typing" aria-pressed="${G.listening}">${icon(G.listening ? 'mic' : 'mic_none')}</button>${B.app.config.safety.voice ? '' : '-->'}
       ${busy ? `<button class="send" data-act="stop" aria-label="Stop">${icon('stop')}</button>` : `<button class="send" data-act="send" aria-label="Send">${icon('arrow_upward')}</button>`}
     </div></div><p class="small ${outsideOf(model) ? '' : 'faint'}" style="text-align:center;margin-top:9px${outsideOf(model) ? ';color:var(--vnk-warn)' : ''}">${outsideOf(model) ? `${icon('public')} This chat uses a model outside your network. Your question is sent to ${esc(outsideOf(model).provider)}. Your documents are not, unless an admin allows it.` : 'Runs on your Vanik Appliance. Nothing leaves your network.'}</p>${!c && !as ? `<p style="text-align:center;margin-top:6px"><button class="link small" data-act="temp-toggle">${icon(G.newOpts.temp ? 'visibility' : 'visibility_off')} ${G.newOpts.temp ? 'Temporary chat is on. Nothing will be kept. Turn off' : 'Start a temporary chat'}</button></p>` : ''}</div>`;
@@ -236,6 +239,9 @@ acts.send = async el => {
   if (G.streaming) return;
   const text = (el && el.dataset.text) || G.draftText.trim();
   if (!text) return;
+  // the web is wanted and is off for this chat: say so first, and send only after the person has chosen
+  const asked = el && el.dataset.web; webAsk.info = null;
+  if (!asked && !G.editOf && !(await webGate(text, G.chat))) { webAsk.chatId = G.chat ? G.chat.id : null; G.draftText = text; return rerender(); }
   const c = await ensureChat();
   G.draftText = '';
   if (location.hash !== '#/gpt/c/' + c.id) history.replaceState(null, '', '#/gpt/c/' + c.id);
@@ -244,6 +250,10 @@ acts.send = async el => {
   await stream(c, body);
 };
 acts.stop = () => { if (G.streaming) G.streaming.ctrl.abort(); };
+const setWeb = async on => { const c = await ensureChat(); c.web = (await api('PUT', `/api/chats/${c.id}/web`, { on })).web; if (location.hash !== '#/gpt/c/' + c.id) history.replaceState(null, '', '#/gpt/c/' + c.id); return c; };
+acts['web-toggle'] = async () => { const c = await setWeb(!(G.chat && G.chat.web)); toast(c.web ? 'Web search is on for this chat. It may use browsing credits.' : 'Web search is off for this chat.'); rerender(); };
+acts['web-yes'] = async () => { const t = webAsk.text; webAsk.info = null; try { await setWeb(true); } catch (e) { return toast(e.message, 'err'); } await acts.send({ dataset: { text: t, web: '1' } }); };
+acts['web-no'] = () => { const t = webAsk.text; webAsk.info = null; return acts.send({ dataset: { text: t, web: '1' } }); };
 acts['int-allow'] = async () => { if (G.streaming || !G.chat) return; const box = $('#int-code'), code = box ? box.value.trim() : ''; if (box && !code) { box.focus(); return toast('Type the code first.'); } while (G.chat.messages.length && G.chat.messages[G.chat.messages.length - 1].role === 'assistant') G.chat.messages.pop(); await stream(G.chat, { allow: true, code }, 'resume'); };
 acts['int-deny'] = async () => { if (G.streaming || !G.chat) return; while (G.chat.messages.length && G.chat.messages[G.chat.messages.length - 1].role === 'assistant') G.chat.messages.pop(); await stream(G.chat, { allow: false }, 'resume'); };
 acts['allow-site'] = async el => { await api('POST', '/api/app/allow-site', { host: el.dataset.host }); toast(el.dataset.host + ' is now allowed. Asking again.'); await load(); acts.regen(); };
@@ -286,6 +296,7 @@ function activityHtml(list) {
 const NOTE = {
   model_unreachable: 'The model could not be reached, so this answer is built straight from your documents.',
   model_parked: 'The model for this chat is parked, so this answer is built straight from your documents.',
+  model_custom: 'VanikGPT is set to a custom endpoint, which this prototype does not call, so this answer is built straight from your documents.',
 };
 function shownCites(m) { const used = new Set([...String(m.content).matchAll(/\[(\d{1,2})\]/g)].map(x => +x[1])); const c = m.citations || []; const hit = c.filter(x => used.has(x.n)); return hit.length ? hit : c; }
 function msgHtml(m, last, readOnly) {
@@ -298,7 +309,7 @@ function msgHtml(m, last, readOnly) {
   const toolErr = m.toolError ? `<div class="note">${icon('error_outline')}<span>${esc(m.toolError)}${m.blockedHost && S.boot.admin && !readOnly ? ` <button class="link" data-act="allow-site" data-host="${esc(m.blockedHost)}">Allow ${esc(m.blockedHost)}</button>` : m.blockedHost ? ' An admin can add it in Setup.' : ''}</span></div>` : '';
   const body = m.mode === 'unavailable'
     ? `<div class="note">${icon('error_outline')}<span>The model could not be reached and nothing in your documents matches this question.${S.boot.admin ? ` <a class="link" href="#/os/apps/vanikgpt/overview">Check VanikGPT health</a>` : ' Try again in a bit, or tell your admin.'}</span></div>`
-    : `${activityHtml(m.activity)}${toolErr}${m.notice ? `<div class="note">${icon('info_outline')}<span>${NOTE[m.notice]}</span></div>` : ''}${m.content ? `<div class="md">${md(m.content)}</div>` : ''}${askCard}${gate}${last && !readOnly && (m.followUps || []).length ? `<div class="row wrap follow" style="gap:6px;margin:2px 0 10px">${m.followUps.map(q => `<button class="tag" data-act="send" data-text="${esc(q)}">${icon('subdirectory_arrow_right')}${esc(q)}</button>`).join('')}</div>` : ''}${m.stopped ? `<p class="small faint">Stopped.</p>` : ''}`;
+    : `${webNote(m)}${activityHtml(m.activity)}${toolErr}${m.notice ? `<div class="note">${icon('info_outline')}<span>${NOTE[m.notice]}</span></div>` : ''}${m.content ? `<div class="md">${md(m.content)}</div>` : ''}${askCard}${gate}${last && !readOnly && (m.followUps || []).length ? `<div class="row wrap follow" style="gap:6px;margin:2px 0 10px">${m.followUps.map(q => `<button class="tag" data-act="send" data-text="${esc(q)}">${icon('subdirectory_arrow_right')}${esc(q)}</button>`).join('')}</div>` : ''}${m.stopped ? `<p class="small faint">Stopped.</p>` : ''}`;
   return `<div class="msg bot" data-mid="${m.id}"><span class="app-ico">${icon('forum')}</span><div class="body">${body}
     ${cites.length ? `<div class="sources">${cites.map(c => `<a class="source" href="#/gpt/source/${c.docId}/${c.chunkId}/${G.chat ? G.chat.id : 'x'}" title="${esc(c.snippet)}"><b>${c.n}</b><span class="ellipsis">${esc(c.docName)}${c.page ? ' · p. ' + c.page : ''}</span></a>`).join('')}</div>` : ''}
     ${readOnly ? '' : `<div class="msg-actions">
@@ -307,7 +318,7 @@ function msgHtml(m, last, readOnly) {
       <button class="icon-btn sm ${m.feedback === 'up' ? 'on' : ''}" data-act="msg-up" data-id="${m.id}" data-tip="Helpful" aria-label="Helpful">${icon('thumb_up_off_alt')}</button>
       <button class="icon-btn sm ${m.feedback === 'down' ? 'on' : ''}" data-act="msg-down" data-id="${m.id}" data-tip="Not helpful" aria-label="Not helpful">${icon('thumb_down_off_alt')}</button>
       ${m.content ? `<button class="icon-btn sm" data-act="msg-more" data-id="${m.id}" data-tip="More" aria-label="More">${icon('more_horiz')}</button>` : `<button class="icon-btn sm" data-act="msg-details" data-id="${m.id}" data-tip="How this answer was made" aria-label="How this answer was made">${icon('insights')}</button>`}
-      <span class="mono" style="margin-left:8px">${esc([m.outside ? 'outside: ' + String(m.model || '').replace(/^out:[a-z]+\//, '') : m.mode === 'model' ? m.model || '' : m.mode === 'documents' ? 'documents only' : m.mode === 'tool' ? 'abilities' : m.mode === 'search' ? 'search only' : '', m.effort && m.effort !== 'balanced' ? m.effort : '', secs].filter(Boolean).join(' · '))}</span>
+      <span class="mono" style="margin-left:8px">${esc([m.outside ? 'outside: ' + String(m.model || '').replace(/^out:[a-z]+\//, '') : m.mode === 'model' ? m.model || '' : m.mode === 'documents' ? 'documents only' : m.mode === 'tool' ? 'abilities' : m.mode === 'web' ? 'web search' : m.mode === 'search' ? 'search only' : '', m.effort && m.effort !== 'balanced' ? m.effort : '', secs].filter(Boolean).join(' · '))}</span>
     </div>`}</div></div>`;
 }
 const findMsg = id => G.chat.messages.find(m => m.id === id);

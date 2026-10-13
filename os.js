@@ -1,5 +1,6 @@
 // Vanik OS console pages that VanikGPT touches: Apps, the VanikGPT manage page, Knowledge base, Model Hub, People, Settings.
 import { hint } from './hints.js';
+import { LINK0, WEB0, bindSetup, linkCard, knowledgeCard, webCard, embedCard, stateChip, publishBar, appsCard, appNames, usedBy, teamsCard } from './gpt_setup.js';
 import { inScope } from './scope.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
 
@@ -84,7 +85,7 @@ acts['app-menu'] = el => {
 
 // ---------- VanikGPT manage page
 let draft = null, draftBase = '', advOpen = false, allModels = false, actTab = 'versions', pollT = null;
-function ensureDraft() { const cfg = S.boot.app.config, base = JSON.stringify({ ...cfg, access: { ...cfg.access, deny: (cfg.access || {}).deny || [] } }); /* the picker adds an empty block list; without it here the page opens as 'unsaved' */ if (!draft || draftBase !== base) { draft = JSON.parse(base); draftBase = base; } accessDrafts.app = draft.access; accessChanged.app = saveBar; }
+function ensureDraft() { const cfg = S.boot.app.config, base = JSON.stringify({ ...cfg, link: cfg.link || LINK0, web: cfg.web || WEB0, access: { ...cfg.access, deny: (cfg.access || {}).deny || [] } }); /* the picker adds an empty block list; without it here the page opens as 'unsaved' */ if (!draft || draftBase !== base) { draft = JSON.parse(base); draftBase = base; } accessDrafts.app = draft.access; accessChanged.app = saveBar; bindSetup(draft, saveBar); }
 const dirty = () => !!draft && JSON.stringify(draft) !== draftBase;
 
 function deployBox() {
@@ -137,7 +138,7 @@ function saveBar() {
   const el = $('#savebar'); if (!el) return;
   const a = S.boot.app, d = dirty();
   el.innerHTML = `<span class="grow muted">${d ? 'You have unsaved changes.' : pendingDeploy() ? `Saved as config v${a.latestVersion}. Not live yet.` : a.deployedVersion ? `Config v${a.deployedVersion} is live.` : 'Choose a model, then save and deploy.'}</span>
-    ${d ? `<button class="btn text" data-act="cfg-discard">Discard</button><button class="btn ghost" data-act="cfg-save">Save</button><button class="btn" data-act="cfg-save" data-deploy="1">Save and deploy</button>` : pendingDeploy() || (a.status === 'needs_setup' && a.latestVersion) ? `<button class="btn" data-act="deploy">Deploy</button>` : a.status === 'needs_setup' ? `<button class="btn" data-act="cfg-save" data-deploy="1" ${draft.models.length ? '' : 'disabled'}>Save and deploy</button>` : ''}`;
+    ${d ? `<button class="btn text" data-act="cfg-discard">Discard</button><button class="btn ghost" data-act="cfg-save">Save</button><button class="btn" data-act="cfg-save" data-deploy="1">Save and deploy</button>` : pendingDeploy() || (a.status === 'needs_setup' && a.latestVersion) ? `<button class="btn" data-act="deploy">Deploy</button>` : a.status === 'needs_setup' ? `<button class="btn" data-act="cfg-save" data-deploy="1" ${draft.models.length || draft.link.mode === 'custom' ? '' : 'disabled'}>Save and deploy</button>` : ''}`;
 }
 function tabSetup() {
   ensureDraft();
@@ -145,11 +146,11 @@ function tabSetup() {
   const sw = (key, on) => `<button class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-act="cfg-switch" data-k="${key}"></button>`;
   const mStatus = m => m.status === 'serving' ? chip('Serving', 'ok') : m.status === 'parked' ? chip('Parked', '') : chip('Not on device', '');
   return `<div class="stack" style="gap:16px;max-width:820px">
-    <div class="card"><div class="card-head"><h3>Models</h3>${info('People pick from these in chat. A model has to be serving in Model Hub to answer.')}<a class="link small right" href="#/os/models">Model Hub</a></div>
-      <div class="stack" style="gap:8px">${chat.filter(m => allModels || m.status !== 'available' || c.models.includes(m.id)).map(m => { const on = c.models.includes(m.id); return `<div class="check ${on ? 'on' : ''}" role="checkbox" aria-checked="${on}" tabindex="0" data-act="cfg-model" data-id="${esc(m.id)}"><span class="box">${icon('check')}</span><span class="grow"><b>${esc(m.id)}</b> <span class="mono">${m.memGb} GB${m.note ? ' · ' + esc(m.note) : ''}</span></span>${on ? `<button class="tag ${c.defaultModel === m.id ? 'on' : ''}" data-act="cfg-default" data-id="${esc(m.id)}" data-stop>${c.defaultModel === m.id ? 'Default' : 'Make default'}</button>` : ''}${mStatus(m)}</div>`; }).join('')}</div>${chat.some(m => m.status === 'available' && !c.models.includes(m.id)) ? `<button class="btn text" style="margin-top:10px" data-act="cfg-allmodels">${icon(allModels ? 'expand_less' : 'expand_more')}${allModels ? 'Show fewer' : `Show ${chat.filter(m => m.status === 'available' && !c.models.includes(m.id)).length} more that are not on the device`}</button>` : ''}</div>
-    <div class="card"><div class="card-head"><h3>Knowledge</h3>${info('The document collections VanikGPT may search. People still only see collections they have access to.')}<a class="link small right" href="#/os/knowledge">Knowledge base</a></div>
-      <div class="seg"><button class="${c.collections === 'all' ? 'on' : ''}" data-act="cfg-cols" data-v="all">All collections</button><button class="${c.collections !== 'all' ? 'on' : ''}" data-act="cfg-cols" data-v="some">Chosen collections</button></div>
-      ${c.collections === 'all' ? '' : `<div class="stack" style="gap:8px;margin-top:12px">${B.collections.length ? B.collections.map(x => { const on = c.collections.includes(x.id); return `<div class="check ${on ? 'on' : ''}" role="checkbox" aria-checked="${on}" tabindex="0" data-act="cfg-col" data-id="${x.id}"><span class="box">${icon('check')}</span><span class="grow"><b>${esc(x.name)}</b> <span class="mono">${x.docCount} documents</span></span></div>`; }).join('') : `<p class="small muted">No collections yet. <a class="link" href="#/os/knowledge">Create one</a></p>`}</div>`}</div>
+    ${linkCard(c, B)}
+    ${B.gptSetup && (B.gptSetup.follows || c.link.mode === 'custom') ? '' : `<div class="card"><div class="card-head"><h3>Models</h3>${info('People pick from these in chat. A model has to be serving in Model Hub to answer.')}<a class="link small right" href="#/os/models">Model Hub</a></div>
+      <div class="stack" style="gap:8px">${chat.filter(m => allModels || m.status !== 'available' || c.models.includes(m.id)).map(m => { const on = c.models.includes(m.id); return `<div class="check ${on ? 'on' : ''}" role="checkbox" aria-checked="${on}" tabindex="0" data-act="cfg-model" data-id="${esc(m.id)}"><span class="box">${icon('check')}</span><span class="grow"><b>${esc(m.id)}</b> <span class="mono">${m.memGb} GB${m.note ? ' · ' + esc(m.note) : ''}</span></span>${on ? `<button class="tag ${c.defaultModel === m.id ? 'on' : ''}" data-act="cfg-default" data-id="${esc(m.id)}" data-stop>${c.defaultModel === m.id ? 'Default' : 'Make default'}</button>` : ''}${mStatus(m)}</div>`; }).join('')}</div>${chat.some(m => m.status === 'available' && !c.models.includes(m.id)) ? `<button class="btn text" style="margin-top:10px" data-act="cfg-allmodels">${icon(allModels ? 'expand_less' : 'expand_more')}${allModels ? 'Show fewer' : `Show ${chat.filter(m => m.status === 'available' && !c.models.includes(m.id)).length} more that are not on the device`}</button>` : ''}</div>`}
+    ${knowledgeCard(B)}
+    ${webCard(c)}
     <div class="card"><div class="card-head"><h3>People</h3>${info('Who sees VanikGPT on their home screen.')}</div>${accessPicker('app', 'Everyone on this tenant')}</div>
     <div class="card"><div class="card-head"><h3>House rules</h3>${info('Plain instructions every chat and every agent follows, on top of its own. For example the tone to use, what never to advise on, or how to write amounts.')}</div><textarea class="input" rows="3" maxlength="4000" placeholder="Answer in plain English. Quote amounts in rupees. Never give legal advice as final." data-on="cfg-rules">${esc(c.instructions || '')}</textarea></div>
     <div class="card"><div class="card-head"><h3>Safety</h3></div>
@@ -170,7 +171,7 @@ acts['cfg-default'] = el => { draft.defaultModel = el.dataset.id; rerender(); };
 acts['cfg-cols'] = el => { draft.collections = el.dataset.v === 'all' ? 'all' : (Array.isArray(draft.collections) ? draft.collections : []); rerender(); };
 acts['cfg-col'] = el => { toggle(draft.collections, el.dataset.id); rerender(); };
 acts['cfg-pii'] = el => { draft.safety.pii = el.dataset.v; rerender(); };
-acts['cfg-switch'] = el => { const [a, b] = el.dataset.k.split('.'); draft[a][b] = !draft[a][b]; rerender(); };
+acts['cfg-switch'] = el => { const [a, b] = el.dataset.k.split('.'); draft[a][b] = !draft[a][b]; if (el.dataset.k === 'advanced.offline' && draft.advanced.offline) draft.web.on = false; /* offline means no web search */ rerender(); };
 acts['cfg-allmodels'] = () => { allModels = !allModels; rerender(); };
 acts['cfg-adv'] = () => { advOpen = !advOpen; };
 acts['cfg-discard'] = () => { draft = null; rerender(); };
@@ -192,7 +193,7 @@ ins['cfg-rules'] = el => { draft.instructions = el.value.trim(); saveBar(); };
 ins['cfg-cors'] = el => { draft.advanced.corsOrigin = el.value.trim(); saveBar(); };
 acts['cfg-save'] = async el => {
   const deploy = !!el.dataset.deploy;
-  if (deploy && !draft.models.length) throw new Error('Pick at least one model before you deploy.');
+  if (deploy && !draft.models.length && draft.link.mode !== 'custom') throw new Error(S.boot.gptSetup && S.boot.gptSetup.follows ? 'Serve a chat model in Model Hub before you deploy.' : 'Pick at least one model before you deploy.');
   await api('PUT', '/api/app/config', { config: draft, deploy });
   draft = null; cache.key = ''; await load();
   if (deploy) { toast('Saved. Deploying now.'); go('#/os/apps/vanikgpt/overview'); watchDeploy(); } else { toast('Setup saved.'); rerender(); }
@@ -281,22 +282,23 @@ function pageManage(tab) {
 }
 
 // ---------- Knowledge base
-const usedByGpt = id => { const a = S.boot.app; return a.status !== 'not_installed' && (a.config.collections === 'all' || a.config.collections.includes(id)); };
+const usedByGpt = id => { const a = S.boot.app, c = S.boot.collections.find(x => x.id === id); return a.status !== 'not_installed' && !!c && usedBy(c, 'vanikgpt') && (a.config.collections === 'all' || a.config.collections.includes(id)); };
 function pageKnowledge() {
   const B = S.boot, docs = B.collections.reduce((n, c) => n + c.docCount, 0), size = B.collections.reduce((n, c) => n + c.bytes, 0);
   return osShell('knowledge', 'Knowledge base', `
-    <div class="page-head"><div class="grow"><h1>Collections</h1><p class="sub">The documents your apps search. Everything stays on the appliance.</p></div><button class="btn lg" data-act="col-new">New collection</button></div>
+    <div class="page-head"><div class="grow"><h1>Knowledge bases</h1><p class="sub">The documents your apps search. Everything stays on the appliance.</p></div><button class="btn lg" data-act="col-new">New knowledge base</button></div>
+    ${embedCard(B)}
     ${B.collections.length ? `<div class="grid">${B.collections.map(c => `<a class="card app-card" href="#/os/knowledge/${c.id}">
       <div class="row"><span class="avatar sq">${esc(initials(c.name))}</span><div class="grow"><h3 class="ellipsis">${esc(c.name)}</h3><span class="mono">${c.docCount} ${c.docCount === 1 ? 'document' : 'documents'} · ${bytes(c.bytes)}</span></div><button class="icon-btn sm" data-act="col-menu" data-id="${c.id}" data-stop aria-label="More">${icon('more_vert')}</button></div>
-      <div class="row wrap" style="gap:6px">${chip(c.docCount ? 'Searchable' : 'Empty', c.docCount ? 'ok' : '')}${chip(accessLabel(c.access), 'line', false)}${usedByGpt(c.id) ? chip('Used by VanikGPT', 'line', false) : chip('Not used by an app yet', 'line', false)}</div>
+      <div class="row wrap" style="gap:6px">${stateChip(c)}${chip(accessLabel(c.access), 'line', false)}${chip(appNames(c), 'line', false)}</div>
       <div class="foot"><span class="small faint grow">Updated ${ago(c.updatedAt)}</span><span class="small" style="font-weight:600">${c.docCount ? 'Open' : 'Add documents'} →</span></div></a>`).join('')}</div>
-      <p class="mono" style="margin-top:18px">${B.collections.length} ${B.collections.length === 1 ? 'collection' : 'collections'} · ${docs} ${docs === 1 ? 'document' : 'documents'} · ${bytes(size)}</p>`
-    : `<div class="empty">${icon('library_books')}No collections yet. A collection is a set of documents an app can search.<br><button class="btn" data-act="col-new">New collection</button></div>`}`);
+      <p class="mono" style="margin-top:18px">${B.collections.length} ${B.collections.length === 1 ? 'knowledge base' : 'knowledge bases'} · ${docs} ${docs === 1 ? 'document' : 'documents'} · ${bytes(size)}</p>`
+    : `<div class="empty">${icon('library_books')}No knowledge bases yet. A knowledge base is a set of documents your apps can search.<br><button class="btn" data-act="col-new">New knowledge base</button></div>`}`);
 }
-acts['col-new'] = () => modal({ title: 'New collection', body: `<div class="stack"><label class="field"><span>Name</span><input class="input" id="f-name" maxlength="80" placeholder="HR policies"></label><label class="field"><span>What is in it ${info('Shown to people when they choose where answers come from.')}</span><input class="input" id="f-desc" maxlength="140" placeholder="Leave, travel and expense rules"></label></div>`,
-  actions: [{ label: 'Create', run: async o => { const c = await api('POST', '/api/collections', { name: $('#f-name', o).value, description: $('#f-desc', o).value }); await load(); go('#/os/knowledge/' + c.id); } }] });
+acts['col-new'] = () => modal({ title: 'New knowledge base', text: 'It starts as a draft that only admins see. Publish it when it is ready.', body: `<div class="stack"><label class="field"><span>Name</span><input class="input" id="f-name" maxlength="80" placeholder="HR policies"></label><label class="field"><span>What is in it ${info('Shown to people when they choose where answers come from.')}</span><input class="input" id="f-desc" maxlength="140" placeholder="Leave, travel and expense rules"></label></div>`,
+  actions: [{ label: 'Create', run: async o => { const c = await api('POST', '/api/collections', { name: $('#f-name', o).value, description: $('#f-desc', o).value, state: 'draft' }); await load(); go('#/os/knowledge/' + c.id); } }] });
 const colDelete = c => confirmBox(`Delete "${c.name}"?`, `Its ${c.docCount} ${c.docCount === 1 ? 'document is' : 'documents are'} removed from the appliance. Answers will stop citing them. This cannot be undone.`, 'Delete', async () => { await api('DELETE', '/api/collections/' + c.id); await load(); go('#/os/knowledge'); });
-const colRename = c => modal({ title: 'Rename collection', body: `<div class="stack"><label class="field"><span>Name</span><input class="input" id="f-name" maxlength="80" value="${esc(c.name)}"></label><label class="field"><span>What is in it</span><input class="input" id="f-desc" maxlength="140" value="${esc(c.description)}"></label></div>`, actions: [{ label: 'Save', run: async o => { await api('PATCH', '/api/collections/' + c.id, { name: $('#f-name', o).value, description: $('#f-desc', o).value }); await refresh(); } }] });
+const colRename = c => modal({ title: 'Rename knowledge base', body: `<div class="stack"><label class="field"><span>Name</span><input class="input" id="f-name" maxlength="80" value="${esc(c.name)}"></label><label class="field"><span>What is in it</span><input class="input" id="f-desc" maxlength="140" value="${esc(c.description)}"></label></div>`, actions: [{ label: 'Save', run: async o => { await api('PATCH', '/api/collections/' + c.id, { name: $('#f-name', o).value, description: $('#f-desc', o).value }); await refresh(); } }] });
 acts['col-menu'] = el => { const c = S.boot.collections.find(x => x.id === el.dataset.id); menu(el, [{ label: 'Rename', icon: 'edit', run: () => colRename(c) }, '-', { label: 'Delete', icon: 'delete_outline', danger: true, run: () => colDelete(c) }]); };
 
 export async function uploadFiles(url, files, extra = {}) {
@@ -314,7 +316,7 @@ export async function uploadFiles(url, files, extra = {}) {
 let colAccessFor = '';
 function pageCollection(id) {
   const B = S.boot, c = B.collections.find(x => x.id === id);
-  if (!c) return osShell('knowledge', 'Knowledge base', `<a class="back" href="#/os/knowledge">${icon('arrow_back')}Knowledge base</a><div class="empty">This collection no longer exists.</div>`);
+  if (!c) return osShell('knowledge', 'Knowledge base', `<a class="back" href="#/os/knowledge">${icon('arrow_back')}Knowledge base</a><div class="empty">This knowledge base no longer exists.</div>`);
   ensure('col:' + id, async () => { cache.docs[id] = await api('GET', `/api/collections/${id}/documents`); });
   if (colAccessFor !== id + JSON.stringify(c.access)) { colAccessFor = id + JSON.stringify(c.access); accessDrafts.col = JSON.parse(JSON.stringify(c.access)); }
   accessChanged.col = () => { const b = $('#acc-save'); if (b) b.classList.toggle('hidden', JSON.stringify(accessDrafts.col) === JSON.stringify(c.access)); };
@@ -324,18 +326,19 @@ function pageCollection(id) {
     <div class="page-head"><span class="avatar sq" style="width:48px;height:48px;font-size:15px">${esc(initials(c.name))}</span><div class="grow"><h1 style="font-size:28px">${esc(c.name)}</h1><p class="sub">${esc(c.description || 'No description')} · ${c.docCount} ${c.docCount === 1 ? 'document' : 'documents'} · ${bytes(c.bytes)}</p></div>
       <button class="btn lg" data-act="doc-add" data-id="${id}">${icon('add')}Add documents</button><button class="icon-btn bordered" data-act="col-menu" data-id="${id}" aria-label="More">${icon('more_vert')}</button></div>
     <div id="uploads"></div>
+    ${publishBar(c)}
     <div class="grid two" style="align-items:start;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)">
       <div class="card"><div class="card-head"><h3>Documents</h3></div>
         ${!docs ? `<p class="muted">Loading…</p>` : docs.length ? `<table class="list"><tr><th>Name</th><th>Size</th><th>Added</th><th></th></tr>${docs.map(d => `<tr><td><a class="link" href="#/gpt/source/${d.id}/-/os">${esc(d.name)}</a><div class="mono">${d.paged ? d.pages + ' pages · ' : ''}${d.chunks} passages</div>
           <div class="row wrap" style="gap:5px;margin-top:5px">${[d.purpose && 'For: ' + d.purpose, d.expiresOn && 'Keep until ' + d.expiresOn, d.restrict.length && 'Only ' + d.restrict.join(', '), d.pii.length && 'Masked: ' + d.pii.join(', '), d.ocr && 'Read from a scan', d.synced && 'From a folder', d.note && 'Note from chat', d.transcribed && 'Recording with transcript', d.waiting && 'Waiting for a transcript'].filter(Boolean).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div></td><td class="muted">${bytes(d.size)}</td><td class="muted">${ago(d.uploadedAt)}<div class="small faint">${esc(d.uploadedBy)}</div></td><td class="act">${d.waiting ? `<button class="icon-btn sm" data-act="doc-transcript" data-id="${d.id}" data-name="${esc(d.name)}" data-tip="Add the transcript" aria-label="Add the transcript">${icon('subtitles')}</button>` : ''}<button class="icon-btn sm" data-act="doc-edit" data-id="${d.id}" data-col="${id}" data-tip="Purpose, keep until, teams" aria-label="Document rules">${icon('tune')}</button><button class="icon-btn sm" data-act="doc-del" data-id="${d.id}" data-name="${esc(d.name)}" data-tip="Remove" aria-label="Remove">${icon('delete_outline')}</button></td></tr>`).join('')}</table>` : ''}
         <div class="drop" data-drop="${id}" style="margin-top:${docs && docs.length ? 16 : 0}px">${icon('upload_file')} Drop files here, or <button class="link" data-act="doc-add" data-id="${id}">choose files</button><div class="small faint" style="margin-top:6px">PDF, Word, Excel, text, code, CSV, HTML, images of scans and recordings. Files are read and stored on the appliance.</div></div></div>
       <div class="stack" style="gap:16px">
-        <div class="card"><div class="card-head"><h3>Who can use it</h3>${info('Only these people get answers from this collection, in any app.')}</div>${accessPicker('col', 'Everyone on this tenant')}<button class="btn hidden" id="acc-save" style="margin-top:14px" data-act="col-access" data-id="${id}">Save</button></div>
+        <div class="card"><div class="card-head"><h3>Who can use it</h3>${info('Only these people get answers from this knowledge base, in any app.')}</div>${accessPicker('col', 'Everyone on this tenant')}<button class="btn hidden" id="acc-save" style="margin-top:14px" data-act="col-access" data-id="${id}">Save</button></div>
         <div class="card"><div class="card-head"><h3>Search</h3>${info('Keyword search always works. Meaning-based search is added when an embedding model is serving, so a question can find a passage that uses different words.')}</div>
           <div class="row">${chip('Keyword', 'ok')}${c.embedded ? chip(`Meaning: ${c.embedded} of ${c.passages} passages`, c.embedded === c.passages ? 'ok' : 'warn') : chip('Meaning: off', '')}<span class="grow"></span>${B.embeddingReady && c.embedded < c.passages ? `<button class="btn ghost" data-act="col-reindex" data-id="${id}">Build</button>` : ''}</div>
           ${!B.embeddingReady && !c.embedded ? `<p class="small muted" style="margin-top:10px">Meaning-based search turns on when an embedding model is serving in <a class="link" href="#/os/models">Model Hub</a> and the model gateway is reachable.</p>` : ''}</div>
         <div class="card"><div class="card-head"><h3>Try a search</h3>${info('Shows the passages an app would get for a question.')}</div><input class="input" id="try-q" placeholder="Type a question and press Enter" data-id="${id}"><div id="try-res" class="stack" style="margin-top:12px;gap:10px"></div></div>
-        <div class="card flat"><div class="row">${icon('apps')}<span class="grow">${usedByGpt(id) ? 'Used by VanikGPT' : 'Not used by an app yet'}</span>${B.app.status !== 'not_installed' ? `<a class="link small" href="#/os/apps/vanikgpt/setup">Change</a>` : ''}</div></div>
+        ${appsCard(c)}
       </div></div>`);
 }
 acts['doc-add'] = async el => { const files = await pickFiles(); if (!files.length) return; await uploadFiles(`/api/collections/${el.dataset.id}/documents`, files); cache.key = ''; await refresh(); };
@@ -355,7 +358,7 @@ acts['col-access'] = async el => { await api('PATCH', '/api/collections/' + el.d
 document.addEventListener('keydown', async e => {
   if (e.key !== 'Enter' || e.target.id !== 'try-q') return;
   const res = $('#try-res'), hits = await api('POST', '/api/search', { q: e.target.value, collectionId: e.target.dataset.id });
-  res.innerHTML = hits.length ? hits.map(h => `<a class="card flat" style="padding:12px" href="#/gpt/source/${h.docId}/${h.chunkId}/os"><div class="small faint ellipsis">${esc(h.docName)}${h.page ? ' · page ' + h.page : ''} · matched by ${h.via === 'both' ? 'keyword and meaning' : h.via}</div><div class="small" style="margin-top:4px">${esc(h.text.slice(0, 220))}${h.text.length > 220 ? '…' : ''}</div></a>`).join('') : `<p class="small muted">Nothing in this collection matches.</p>`;
+  res.innerHTML = hits.length ? hits.map(h => `<a class="card flat" style="padding:12px" href="#/gpt/source/${h.docId}/${h.chunkId}/os"><div class="small faint ellipsis">${esc(h.docName)}${h.page ? ' · page ' + h.page : ''} · matched by ${h.via === 'both' ? 'keyword and meaning' : h.via}</div><div class="small" style="margin-top:4px">${esc(h.text.slice(0, 220))}${h.text.length > 220 ? '…' : ''}</div></a>`).join('') : `<p class="small muted">Nothing in this knowledge base matches.</p>`;
 });
 for (const ev of ['dragover', 'dragleave', 'drop']) document.addEventListener(ev, async e => {
   const z = e.target.closest && e.target.closest('[data-drop]'); if (!z) return;
@@ -410,7 +413,8 @@ function pagePeople() {
       <td><div class="row wrap" style="gap:5px">${(u.teams || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}<button class="icon-btn sm" data-act="user-teams" data-id="${u.id}" data-tip="Edit teams" aria-label="Edit teams">${icon('edit')}</button></div></td>
       <td class="muted">${u.status === 'invited' ? chip('Invited', 'warn') : ago(u.lastActiveAt)}</td>
       <td class="act">${S.boot.app.config.safety.adminChats ? `<button class="icon-btn sm tip-left" data-act="user-chats" data-id="${u.id}" data-tip="Open their chats (recorded)" aria-label="Open their chats">${icon('forum')}</button>` : ''}<button class="icon-btn sm tip-left" data-act="user-erase" data-id="${u.id}" data-tip="Erase their chats and files" aria-label="Erase data">${icon('cleaning_services')}</button>${u.role === 'owner' ? '' : `<button class="icon-btn sm" data-act="user-remove" data-id="${u.id}" data-tip="Remove" aria-label="Remove">${icon('person_remove')}</button>`}</td></tr>`).join('')}</table></div>
-    <p class="mono" style="margin-top:18px">${B.users.length} ${B.users.length === 1 ? 'user' : 'users'}</p>`);
+    <p class="mono" style="margin-top:18px">${B.users.length} ${B.users.length === 1 ? 'user' : 'users'}</p>
+    ${teamsCard(B)}`);
 }
 const teamsOf = v => v.split(',').map(s => s.trim()).filter(Boolean);
 acts['user-invite'] = () => {
