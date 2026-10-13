@@ -2,7 +2,7 @@
 // The server files are loaded as text and given small stand-ins for http, fs, crypto, path, os and child_process.
 // State is kept in this browser (IndexedDB). Nothing is sent anywhere.
 const BASE = new URL('./', self.location).pathname.replace(/\/$/, '');
-const BUILD = '20261013110442'; // set by build_demo.mjs; the page carries the same mark
+const BUILD = '20261013123227'; // set by build_demo.mjs; the page carries the same mark
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 // ---- storage: one JSON document
@@ -47,7 +47,7 @@ const BufferLike = { concat: parts => ({ toString: () => dec.decode(new Uint8Arr
 const cache = {};
 async function boot() {
   dbText = (await kvGet(DBKEY)) ?? null;
-  const src = {}, names = ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'sense_insight', 'sense_setup', 'gpt_setup', 'app_admin', 'plane'];
+  const src = {}, names = ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'sense_insight', 'sense_notes', 'sense_setup', 'gpt_setup', 'app_admin', 'plane'];
   (await Promise.all(names.map(f => fetch(`${BASE}/node/${f}.js`, { cache: 'no-cache' }).then(r => r.text())))).forEach((t, i) => { src[names[i]] = t; }); // all at once: the start is several seconds shorter
   const req = name => { if (mods[name]) return mods[name]; const f = name.replace('./', ''); if (!cache[f]) { const module = { exports: {} }; cache[f] = module; run(src[f], module); } return cache[f].exports; };
   const run = (code, module) => new Function('require', 'module', 'exports', 'process', '__dirname', 'Buffer', 'setInterval', 'setTimeout', 'clearTimeout', 'clearInterval', 'console', code)(req, module, module.exports, { env: { VANIK_DEMO: '1' }, argv: [], on() {}, execPath: '' }, '/app', BufferLike, timer(setInterval), timer(setTimeout), clear(clearTimeout), clear(clearInterval), { log() {}, error: (...a) => console.error(...a) });

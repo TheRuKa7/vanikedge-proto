@@ -23,7 +23,7 @@
       if (!('serviceWorker' in navigator)) { document.getElementById('root').textContent = 'This preview needs a browser with service workers.'; return; }
       const say = t => { const b = document.querySelector('#root .boot'); if (b) b.textContent = t; };
       say('Starting the preview. The first time takes a few seconds.');
-      const BUILD = '20261013110442', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
+      const BUILD = '20261013123227', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
       const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
       await navigator.serviceWorker.ready;
       if (!navigator.serviceWorker.controller) await changed();
