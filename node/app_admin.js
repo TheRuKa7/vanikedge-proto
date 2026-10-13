@@ -12,7 +12,7 @@ module.exports = function install({ db, on, err, audit, isAdmin, needGpt, call }
   const isAppAdmin = u => adminOf().users.includes(u.id);
   const managed = () => adminOf().users.length > 0;
   const files = () => db.documents.filter(d => String(d.collectionId).startsWith('chat:'));
-  const used = () => ({ chats: db.chats.length, files: files().length, bytes: Buffer.byteLength(JSON.stringify(db.chats)) + files().reduce((n, d) => n + (d.size || 0), 0) });
+  const used = () => ({ chats: db.chats.length, files: files().length, bytes: JSON.stringify(db.chats).length + files().reduce((n, d) => n + (d.size || 0), 0) });
   // the chats and the files attached to them go when the place or the space changes; knowledge bases are not touched
   function wipe(u, was, to) {
     const n = used(); db.chats = []; db.documents = db.documents.filter(d => !String(d.collectionId).startsWith('chat:')); db.folders = [];
