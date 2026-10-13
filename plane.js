@@ -10,6 +10,7 @@ import { appsCard, setupBanner, suiteNeed } from './suite.js';
 import { platformState, platformEnsure } from './platform.js';
 import { apiPage } from './edge.js';
 
+import { teamsCard } from './gpt_setup.js';
 const Q = { days: 7, ptab: 'all', pq: '', aq: '' };
 export const planeRouteChanged = () => { Object.keys(Q).forEach(k => { if (k.endsWith('Key')) Q[k] = ''; }); };
 const get = (slot, key, path) => { if (Q[slot + 'Key'] !== key) { Q[slot + 'Key'] = key; api('GET', path).then(d => { if (Q[slot + 'Key'] === key) { Q[slot] = d; rerender(); } }).catch(e => toast(e.message, 'err')); } return Q[slot]; };
@@ -156,7 +157,8 @@ function pagePeople() {
   const B = S.boot, U = B.users, c = { all: U.length, active: U.filter(u => u.status !== 'invited').length, invited: U.filter(u => u.status === 'invited').length, admins: U.filter(u => u.role !== 'user').length, directory: U.filter(u => u.fromDirectory).length }; get('can', 'can', '/api/access'); suiteNeed();
   return osShell('people', 'People', `<div class="page-head"><div class="grow"><h1>People</h1><p class="sub">Who can sign in, what role they have and what they can use.</p></div><button class="btn lg" data-act="user-invite">${icon('person_add')}Invite someone</button></div>
     <div class="card"><div class="row wrap" style="gap:12px;margin-bottom:12px"><div class="seg">${[['all', 'All'], ['active', 'Active'], ['invited', 'Invited'], ['admins', 'Admins'], ['directory', 'From the directory']].map(t => `<button class="${Q.ptab === t[0] ? 'on' : ''}" data-act="ppl-tab" data-v="${t[0]}">${t[1]} <span class="mono">${c[t[0]]}</span></button>`).join('')}</div><input class="input grow" style="min-width:200px" placeholder="Search by name, email or team" value="${esc(Q.pq)}" data-on="ppl-q" aria-label="Search people"></div>
-      <table class="list"><tr><th>Person</th><th>Role ${info('Owners and admins run the appliance. App users only use what they are given.')}</th><th>Teams ${info('Give a team an app or a collection in one go on the Access tab.')}</th><th>Can use</th><th>Last active</th><th></th></tr><tbody id="ppl-rows">${peopleRows()}</tbody></table></div>`);
+      <table class="list"><tr><th>Person</th><th>Role ${info('Owners and admins run the appliance. App users only use what they are given.')}</th><th>Teams ${info('Give a team an app or a knowledge base in one go. Teams are made below.')}</th><th>Can use</th><th>Last active</th><th></th></tr><tbody id="ppl-rows">${peopleRows()}</tbody></table></div>
+    ${teamsCard(B)}`);
 }
 
 // ================= Models: ask Vanik to train one =================

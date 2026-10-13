@@ -2,7 +2,7 @@
 // The server files are loaded as text and given small stand-ins for http, fs, crypto, path, os and child_process.
 // State is kept in this browser (IndexedDB). Nothing is sent anywhere.
 const BASE = new URL('./', self.location).pathname.replace(/\/$/, '');
-const BUILD = '20261013064947'; // set by build_demo.mjs; the page carries the same mark
+const BUILD = '20261013065325'; // set by build_demo.mjs; the page carries the same mark
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 // ---- storage: one JSON document
