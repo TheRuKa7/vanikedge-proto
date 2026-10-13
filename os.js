@@ -1,6 +1,6 @@
 // Vanik OS console pages that VanikGPT touches: Apps, the VanikGPT manage page, Knowledge base, Model Hub, People, Settings.
 import { hint } from './hints.js';
-import { ADMIN0, STORE0, openApp, whoRuns, storageCard, managedCard } from './app_admin.js';
+import { ADMIN0, STORE0, openApp, whoRuns, storageCard } from './app_admin.js';
 import { LINK0, WEB0, bindSetup, linkCard, knowledgeCard, webCard, embedCard, stateChip, publishBar, appsCard, appNames, usedBy, teamsCard } from './gpt_setup.js';
 import { inScope } from './scope.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
@@ -170,7 +170,7 @@ function tabSetup() {
   const mStatus = m => m.status === 'serving' ? chip('Serving', 'ok') : m.status === 'parked' ? chip('Parked', '') : chip('Not on device', '');
   const lost = `${g.storage.chats || 0} ${g.storage.chats === 1 ? 'chat' : 'chats'} and ${g.storage.files || 0} ${g.storage.files === 1 ? 'file' : 'files'} kept so far`;
   return `<div class="stack" style="gap:16px;max-width:820px">
-    ${whoRuns({ p: 'cfg-admin', app: 'gpt', name: 'VanikGPT', people: B.users.filter(u => u.role === 'user'), picked: c.admin.users, advanced: c.admin.advanced, options: 'web search, guardrails and safety', keeps: 'the model, the knowledge, the storage and who can use it' })}
+    ${whoRuns({ p: 'cfg-admin', app: 'gpt', name: 'VanikGPT', people: B.users.filter(u => u.role === 'user'), picked: c.admin.users, advanced: c.admin.advanced, options: 'web search, guardrails and safety', keeps: 'the model, the knowledge, the storage and who can use it', href: '#/gpt/manage' })}
     ${sect('Set in the console')}
     ${linkCard(c, B)}
     ${B.gptSetup && (B.gptSetup.follows || c.link.mode === 'custom') ? '' : `<div class="card"><div class="card-head"><h3>Models</h3>${info('People pick from these in chat. A model has to be serving in Model Hub to answer.')}<a class="link small right" href="#/os/models">Model Hub</a></div>
@@ -178,12 +178,7 @@ function tabSetup() {
     ${knowledgeCard(B)}
     ${storageCard({ p: 'cfg-store', store: c.storage, saved: live.storage || STORE0, used: g.storage, things: 'chats and the files attached to them', lost })}
     <div class="card"><div class="card-head"><h3>People</h3>${info('Who sees VanikGPT on their home screen.')}</div>${accessPicker('app', 'Everyone on this tenant')}</div>
-    ${sect(managed ? 'Run inside VanikGPT' : 'App options')}
-    ${managed ? `${managedCard({ name: 'VanikGPT', names: B.users.filter(u => c.admin.users.includes(u.id)).map(u => u.name), href: '#/gpt/manage', rows: [
-        ['Web search', (live.web || WEB0).on ? `On · ${(live.web || WEB0).credits} browsing credits a month` : 'Off'],
-        ['Guardrails', `${live.instructions ? 'House rules are set' : 'No house rules'} · personal data: ${{ mask: 'masked', flag: 'flagged', off: 'left as typed' }[live.safety.pii]} · ${(live.safety.blockedTopics || []).length} blocked topics`],
-        ['Safety', `File uploads in chat: ${live.safety.uploads ? 'on' : 'off'} · chats are private`],
-        ['Advanced', c.admin.advanced ? 'With the app admin' : 'Kept on this page, below', c.admin.advanced ? 'Read-only' : 'Console'] ] })}${c.admin.advanced ? '' : advancedCard(c)}` : optionCards(c, true)}
+    ${managed ? (c.admin.advanced ? '' : `${sect('Advanced, kept in the console')}${advancedCard(c)}`) : `${sect('App options')}${optionCards(c, true)}`}
     <div class="savebar" id="savebar"></div></div>`;
 }
 // the same options inside VanikGPT, for the app admin
