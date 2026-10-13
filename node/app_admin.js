@@ -14,7 +14,7 @@ module.exports = function install({ db, on, err, audit, isAdmin, needGpt, call, 
   // ---------- data stores, for every app on this console
   const KINDS = { postgres: 'PostgreSQL database', s3: 'S3 bucket', disk: 'Disk', nfs: 'Network share' };
   const stores = () => { if (!db.stores) db.stores = [{ id: 'st_db', name: 'Appliance database', kind: 'postgres', where: db.device.name, builtin: true, at: now() }, { id: 'st_disk', name: 'Appliance disk', kind: 'disk', where: db.device.name, builtin: true, at: now() }]; return db.stores; };
-  const usedBy = id => [cfg() && cfg().storage && db.app.status !== 'not_installed' && cleanStore(cfg().storage).store === id && 'VanikGPT', db.sense && db.sense.policy && db.sense.policy.storage && (db.sense.policy.storage.store || 'st_db') === id && 'Vanik Sense'].filter(Boolean);
+  const usedBy = id => [cfg() && db.app.status !== 'not_installed' && cleanStore(cfg().storage).store === id && 'VanikGPT', db.sense && db.sense.policy && db.sense.policy.storage && (db.sense.policy.storage.store || 'st_db') === id && 'Vanik Sense'].filter(Boolean);
   const storeView = s => ({ ...s, kindName: KINDS[s.kind], usedBy: usedBy(s.id) });
   on('GET', '/api/stores', () => ({ stores: stores().map(storeView), kinds: Object.entries(KINDS) }), A);
   on('POST', '/api/stores', ({ u, body }) => {
