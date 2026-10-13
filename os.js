@@ -1,5 +1,6 @@
 // Vanik OS console pages that VanikGPT touches: Apps, the VanikGPT manage page, Knowledge base, Model Hub, People, Settings.
 import { hint } from './hints.js';
+import { ADMIN0, STORE0, openApp, whoRuns, storageCard, managedCard } from './app_admin.js';
 import { LINK0, WEB0, bindSetup, linkCard, knowledgeCard, webCard, embedCard, stateChip, publishBar, appsCard, appNames, usedBy, teamsCard } from './gpt_setup.js';
 import { inScope } from './scope.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
@@ -85,7 +86,7 @@ acts['app-menu'] = el => {
 
 // ---------- VanikGPT manage page
 let draft = null, draftBase = '', advOpen = false, allModels = false, actTab = 'versions', pollT = null;
-function ensureDraft() { const cfg = S.boot.app.config, base = JSON.stringify({ ...cfg, link: cfg.link || LINK0, web: cfg.web || WEB0, access: { ...cfg.access, deny: (cfg.access || {}).deny || [] } }); /* the picker adds an empty block list; without it here the page opens as 'unsaved' */ if (!draft || draftBase !== base) { draft = JSON.parse(base); draftBase = base; } accessDrafts.app = draft.access; accessChanged.app = saveBar; bindSetup(draft, saveBar); }
+function ensureDraft() { const cfg = S.boot.app.config, base = JSON.stringify({ ...cfg, link: cfg.link || LINK0, web: cfg.web || WEB0, admin: cfg.admin || ADMIN0, storage: cfg.storage || STORE0, access: { ...cfg.access, deny: (cfg.access || {}).deny || [] } }); /* the picker adds an empty block list; without it here the page opens as 'unsaved' */ if (!draft || draftBase !== base) { draft = JSON.parse(base); draftBase = base; } accessDrafts.app = draft.access; accessChanged.app = saveBar; bindSetup(draft, saveBar); }
 const dirty = () => !!draft && JSON.stringify(draft) !== draftBase;
 
 function deployBox() {
@@ -137,34 +138,65 @@ function tabOverview() {
 function saveBar() {
   const el = $('#savebar'); if (!el) return;
   const a = S.boot.app, d = dirty();
+  if (location.hash.startsWith('#/gpt/manage')) { el.innerHTML = `<span class="grow muted">${d ? 'You have unsaved changes.' : 'Everything is saved.'}</span>${d ? `<button class="btn text" data-act="cfg-discard">Discard</button><button class="btn" data-act="mg-save">Save</button>` : ''}`; return; }
   el.innerHTML = `<span class="grow muted">${d ? 'You have unsaved changes.' : pendingDeploy() ? `Saved as config v${a.latestVersion}. Not live yet.` : a.deployedVersion ? `Config v${a.deployedVersion} is live.` : 'Choose a model, then save and deploy.'}</span>
     ${d ? `<button class="btn text" data-act="cfg-discard">Discard</button><button class="btn ghost" data-act="cfg-save">Save</button><button class="btn" data-act="cfg-save" data-deploy="1">Save and deploy</button>` : pendingDeploy() || (a.status === 'needs_setup' && a.latestVersion) ? `<button class="btn" data-act="deploy">Deploy</button>` : a.status === 'needs_setup' ? `<button class="btn" data-act="cfg-save" data-deploy="1" ${draft.models.length || draft.link.mode === 'custom' ? '' : 'disabled'}>Save and deploy</button>` : ''}`;
 }
+// The app options: one set of cards, drawn from the one draft, shown on the console's Setup page or inside VanikGPT.
+const advancedCard = c => { const sw = (key, on) => `<button class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-act="cfg-switch" data-k="${key}"></button>`;
+  return `<div class="card"><details class="adv" ${advOpen ? 'open' : ''} style="margin:0;border:0;padding:0"><summary data-act="cfg-adv">${icon('chevron_right')}Advanced</summary><div>
+    <div class="set-row"><div class="grow"><div class="lbl">Questions per person per day ${info('Stops one person from using all the capacity. 0 means no limit.')}</div></div><input class="input" style="width:110px" type="number" min="0" max="10000" value="${c.safety.dailyLimit}" data-on="cfg-limit"></div>
+    <div class="set-row"><div class="grow"><div class="lbl">Port ${info('The port VanikGPT listens on, on the device.')}</div></div><input class="input" style="width:110px" type="number" min="1024" max="65535" value="${c.advanced.port}" data-on="cfg-port"></div>
+    <div class="set-row"><div class="grow"><div class="lbl">Offline mode ${info('The app never calls the internet. Leave on for air-gapped sites. Turning it on turns web search off.')}</div></div>${sw('advanced.offline', c.advanced.offline)}</div>
+    <div class="set-row"><div class="grow"><div class="lbl">Share device health with Vanik Edge ${info('Sends only whether the app is running and how much capacity is left. Never questions, answers or files.')}</div></div>${sw('advanced.telemetry', c.advanced.telemetry)}</div>
+    <div class="set-row"><div class="grow"><div class="lbl">Allowed web origin ${info('Only needed when another internal site embeds VanikGPT. Leave empty otherwise.')}</div></div><input class="input" style="width:260px" placeholder="https://intranet.example.com" value="${esc(c.advanced.corsOrigin)}" data-on="cfg-cors"></div>
+  </div></details></div>`; };
+function optionCards(c, adv) {
+  const sw = (key, on) => `<button class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-act="cfg-switch" data-k="${key}"></button>`;
+  return `${webCard(c)}
+    <div class="card"><div class="card-head"><h3>Guardrails</h3>${info('What every chat follows, and what it never does.')}</div>
+      <label class="field"><span>House rules ${info('Plain instructions every chat follows. For example the tone to use, what never to advise on, or how to write amounts.')}</span><textarea class="input" rows="3" maxlength="4000" placeholder="Answer in plain English. Quote amounts in rupees. Never give legal advice as final." data-on="cfg-rules">${esc(c.instructions || '')}</textarea></label>
+      <div class="set-row" style="margin-top:8px"><div class="grow"><div class="lbl">Personal data in a question ${info('Aadhaar, PAN, phone, card and bank numbers. Mask: replaced before the question reaches the model or is saved. Flag: sent as typed, with a mark.')}</div></div><div class="seg">${[['mask', 'Mask it'], ['flag', 'Flag it'], ['off', 'Leave it']].map(x => `<button class="${c.safety.pii === x[0] ? 'on' : ''}" data-act="cfg-pii" data-v="${x[0]}">${x[1]}</button>`).join('')}</div></div>
+      <div class="set-row" style="align-items:flex-start"><div class="grow"><div class="lbl">Never answer about ${info('A question that names one of these is not answered and is not sent to the model.')}</div><div class="row wrap" style="gap:6px;margin-top:8px">${(c.safety.blockedTopics || []).map(t => `<span class="tag">${esc(t)}<button data-act="cfg-topic-del" data-v="${esc(t)}" aria-label="Remove ${esc(t)}">${icon('close')}</button></span>`).join('')}<input class="input" id="topic-in" style="width:210px;height:30px" placeholder="Add a topic, press Enter" aria-label="Add a topic"></div></div></div></div>
+    <div class="card"><div class="card-head"><h3>Safety</h3></div>
+      <div class="set-row"><div class="grow"><div class="lbl">File uploads in chat ${info('Lets people attach a file to one chat. The file is searched only in that chat.')}</div></div>${sw('safety.uploads', c.safety.uploads)}</div>
+      <div class="set-row"><div class="grow"><div class="lbl">People's chats are private</div><div class="small muted">Nobody but the person can read a chat unless they share it. Owners and admins cannot open it.</div></div>${chip('Always', 'ok', false)}</div></div>
+    ${adv ? advancedCard(c) : ''}`;
+}
+const sect = t => `<div class="cap" style="margin:10px 0 -6px">${t}</div>`;
 function tabSetup() {
   ensureDraft();
-  const B = S.boot, c = draft, chat = B.models.filter(m => m.kind === 'chat');
-  const sw = (key, on) => `<button class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-act="cfg-switch" data-k="${key}"></button>`;
+  const B = S.boot, c = draft, chat = B.models.filter(m => m.kind === 'chat'), live = B.app.config, managed = c.admin.users.length > 0, g = B.gptAdmin || { names: [], storage: {} };
   const mStatus = m => m.status === 'serving' ? chip('Serving', 'ok') : m.status === 'parked' ? chip('Parked', '') : chip('Not on device', '');
+  const lost = `${g.storage.chats || 0} ${g.storage.chats === 1 ? 'chat' : 'chats'} and ${g.storage.files || 0} ${g.storage.files === 1 ? 'file' : 'files'} kept so far`;
   return `<div class="stack" style="gap:16px;max-width:820px">
+    ${whoRuns({ p: 'cfg-admin', app: 'gpt', name: 'VanikGPT', people: B.users.filter(u => u.role === 'user'), picked: c.admin.users, advanced: c.admin.advanced, options: 'web search, guardrails and safety', keeps: 'the model, the knowledge, the storage and who can use it' })}
+    ${sect('Set in the console')}
     ${linkCard(c, B)}
     ${B.gptSetup && (B.gptSetup.follows || c.link.mode === 'custom') ? '' : `<div class="card"><div class="card-head"><h3>Models</h3>${info('People pick from these in chat. A model has to be serving in Model Hub to answer.')}<a class="link small right" href="#/os/models">Model Hub</a></div>
       <div class="stack" style="gap:8px">${chat.filter(m => allModels || m.status !== 'available' || c.models.includes(m.id)).map(m => { const on = c.models.includes(m.id); return `<div class="check ${on ? 'on' : ''}" role="checkbox" aria-checked="${on}" tabindex="0" data-act="cfg-model" data-id="${esc(m.id)}"><span class="box">${icon('check')}</span><span class="grow"><b>${esc(m.id)}</b> <span class="mono">${m.memGb} GB${m.note ? ' · ' + esc(m.note) : ''}</span></span>${on ? `<button class="tag ${c.defaultModel === m.id ? 'on' : ''}" data-act="cfg-default" data-id="${esc(m.id)}" data-stop>${c.defaultModel === m.id ? 'Default' : 'Make default'}</button>` : ''}${mStatus(m)}</div>`; }).join('')}</div>${chat.some(m => m.status === 'available' && !c.models.includes(m.id)) ? `<button class="btn text" style="margin-top:10px" data-act="cfg-allmodels">${icon(allModels ? 'expand_less' : 'expand_more')}${allModels ? 'Show fewer' : `Show ${chat.filter(m => m.status === 'available' && !c.models.includes(m.id)).length} more that are not on the device`}</button>` : ''}</div>`}
     ${knowledgeCard(B)}
-    ${webCard(c)}
+    ${storageCard({ p: 'cfg-store', store: c.storage, saved: live.storage || STORE0, used: g.storage, things: 'chats and the files attached to them', lost })}
     <div class="card"><div class="card-head"><h3>People</h3>${info('Who sees VanikGPT on their home screen.')}</div>${accessPicker('app', 'Everyone on this tenant')}</div>
-    <div class="card"><div class="card-head"><h3>House rules</h3>${info('Plain instructions every chat and every agent follows, on top of its own. For example the tone to use, what never to advise on, or how to write amounts.')}</div><textarea class="input" rows="3" maxlength="4000" placeholder="Answer in plain English. Quote amounts in rupees. Never give legal advice as final." data-on="cfg-rules">${esc(c.instructions || '')}</textarea></div>
-    <div class="card"><div class="card-head"><h3>Safety</h3></div>
-      <div class="set-row"><div class="grow"><div class="lbl">File uploads in chat ${info('Lets people attach a file to one chat. The file is searched only in that chat.')}</div></div>${sw('safety.uploads', c.safety.uploads)}</div>
-      <div class="set-row"><div class="grow"><div class="lbl">People's chats are private</div><div class="small muted">Nobody but the person can read a chat unless they share it. Owners and admins cannot open it.</div></div>${chip('Always', 'ok', false)}</div>
-      <details class="adv" ${advOpen ? 'open' : ''}><summary data-act="cfg-adv">${icon('chevron_right')}Advanced</summary><div>
-        <div class="set-row"><div class="grow"><div class="lbl">Questions per person per day ${info('Stops one person from using all the capacity. 0 means no limit.')}</div></div><input class="input" style="width:110px" type="number" min="0" max="10000" value="${c.safety.dailyLimit}" data-on="cfg-limit"></div>
-        <div class="set-row"><div class="grow"><div class="lbl">Port ${info('The port VanikGPT listens on, on the device.')}</div></div><input class="input" style="width:110px" type="number" min="1024" max="65535" value="${c.advanced.port}" data-on="cfg-port"></div>
-        <div class="set-row"><div class="grow"><div class="lbl">Offline mode ${info('The app never calls the internet. Leave on for air-gapped sites.')}</div></div>${sw('advanced.offline', c.advanced.offline)}</div>
-        <div class="set-row"><div class="grow"><div class="lbl">Share device health with Vanik Edge ${info('Sends only whether the app is running and how much capacity is left. Never questions, answers or files.')}</div></div>${sw('advanced.telemetry', c.advanced.telemetry)}</div>
-        <div class="set-row"><div class="grow"><div class="lbl">Allowed web origin ${info('Only needed when another internal site embeds VanikGPT. Leave empty otherwise.')}</div></div><input class="input" style="width:260px" placeholder="https://intranet.example.com" value="${esc(c.advanced.corsOrigin)}" data-on="cfg-cors"></div>
-      </div></details></div>
+    ${sect(managed ? 'Run inside VanikGPT' : 'App options')}
+    ${managed ? `${managedCard({ name: 'VanikGPT', names: B.users.filter(u => c.admin.users.includes(u.id)).map(u => u.name), href: '#/gpt/manage', rows: [
+        ['Web search', (live.web || WEB0).on ? `On · ${(live.web || WEB0).credits} browsing credits a month` : 'Off'],
+        ['Guardrails', `${live.instructions ? 'House rules are set' : 'No house rules'} · personal data: ${{ mask: 'masked', flag: 'flagged', off: 'left as typed' }[live.safety.pii]} · ${(live.safety.blockedTopics || []).length} blocked topics`],
+        ['Safety', `File uploads in chat: ${live.safety.uploads ? 'on' : 'off'} · chats are private`],
+        ['Advanced', c.admin.advanced ? 'With the app admin' : 'Kept on this page, below', c.admin.advanced ? 'Read-only' : 'Console'] ] })}${c.admin.advanced ? '' : advancedCard(c)}` : optionCards(c, true)}
     <div class="savebar" id="savebar"></div></div>`;
 }
+// the same options inside VanikGPT, for the app admin
+export function gptOptionsPage() {
+  ensureDraft(); const g = S.boot.gptAdmin; queueMicrotask(saveBar);
+  return `<div class="stack" style="gap:16px;max-width:820px">${optionCards(draft, g.advanced)}${g.advanced ? '' : `<p class="small muted">${icon('lock')} The advanced settings are kept in the Vanik Edge console.</p>`}<div class="savebar" id="savebar"></div></div>`;
+}
+acts['cfg-admin-mode'] = el => { openApp.gpt = el.dataset.v === 'app'; if (!openApp.gpt) draft.admin = { users: [], advanced: false }; rerender(); };
+acts['cfg-admin-pick'] = el => { toggle(draft.admin.users, el.dataset.v); if (!draft.admin.users.length) draft.admin.advanced = false; rerender(); };
+acts['cfg-admin-adv'] = () => { draft.admin.advanced = !draft.admin.advanced; rerender(); };
+acts['cfg-store-kind'] = el => { draft.storage.kind = el.dataset.v; rerender(); };
+ins['cfg-store-gb'] = el => { draft.storage.gb = Math.max(1, Math.min(2000, Math.round(+el.value || 20))); rerender(); };
+acts['mg-save'] = async () => { const d = draft; try { await api('PUT', '/api/gpt/manage', { web: d.web, instructions: d.instructions, safety: d.safety, advanced: d.advanced }); } catch (e) { return toast(e.message, 'err'); } draft = null; cache.key = ''; await load(); toast('Saved. It applies to every chat from now.'); rerender(); };
 const toggle = (l, v) => { const i = l.indexOf(v); if (i < 0) l.push(v); else l.splice(i, 1); };
 acts['cfg-model'] = el => { toggle(draft.models, el.dataset.id); if (!draft.models.includes(draft.defaultModel)) draft.defaultModel = draft.models[0] || null; rerender(); };
 acts['cfg-default'] = el => { draft.defaultModel = el.dataset.id; rerender(); };
@@ -194,6 +226,9 @@ ins['cfg-cors'] = el => { draft.advanced.corsOrigin = el.value.trim(); saveBar()
 acts['cfg-save'] = async el => {
   const deploy = !!el.dataset.deploy;
   if (deploy && !draft.models.length && draft.link.mode !== 'custom') throw new Error(S.boot.gptSetup && S.boot.gptSetup.follows ? 'Serve a chat model in Model Hub before you deploy.' : 'Pick at least one model before you deploy.');
+  const st0 = S.boot.app.config.storage || STORE0, g = S.boot.gptAdmin || { storage: {} }, moved = draft.storage.kind !== st0.kind || draft.storage.gb !== st0.gb;
+  if (moved && !el.dataset.sure && (g.storage.chats || g.storage.files)) return confirmBox('Change the storage?', `A new place or a new size starts empty. ${g.storage.chats} chats and ${g.storage.files} files kept so far are removed for everyone. Knowledge bases are not touched. This cannot be undone.`, 'Remove and save', () => acts['cfg-save']({ dataset: { deploy: deploy ? '1' : '', sure: '1' } }));
+  openApp.gpt = false;
   await api('PUT', '/api/app/config', { config: draft, deploy });
   draft = null; cache.key = ''; await load();
   if (deploy) { toast('Saved. Deploying now.'); go('#/os/apps/vanikgpt/overview'); watchDeploy(); } else { toast('Setup saved.'); rerender(); }

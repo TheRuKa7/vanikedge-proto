@@ -77,3 +77,15 @@ button.tag.in-type { cursor: pointer; }
 @media (max-width: 760px) { .sc { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .sc-p, .sc-p *, .sc-rec::before, .sc-mic i { animation: none !important; } }
 .modal .sc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* v21: guides, the two choices when there are no meetings, who runs an app */
+.gd-ok { color: var(--vnk-ok, #2e7d32); } .gd-miss { color: var(--vnk-warn); } .gd-opt { color: var(--vnk-ink-3); }
+.gd-flow { border-top: 1px solid var(--vnk-border); } .gd-flow:first-of-type { border-top: 0; }
+.gd-flow summary { display: flex; align-items: center; gap: 12px; padding: 12px 0; cursor: pointer; list-style: none; font-weight: 600; } .gd-flow summary::-webkit-details-marker { display: none; }
+.gd-flow summary > .mi:first-child { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--vnk-bg); font-size: 18px; flex: none; }
+.gd-flow .gd-chev { transition: transform .15s; color: var(--vnk-ink-3); } .gd-flow[open] .gd-chev { transform: rotate(180deg); }
+.gd-flow ol { margin: 0 0 12px 46px; padding-left: 18px; display: grid; gap: 6px; color: var(--vnk-ink-2, inherit); font-size: 14px; }
+.gd-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } .gd-two .card { display: grid; gap: 8px; align-content: start; } .gd-two h3 { margin-top: 6px; }
+.gd-first { max-width: 760px; margin: 14px auto 0; padding: 12px 16px; } .gd-first .mi { color: var(--vnk-brand); }
+.card.who { border-color: var(--vnk-brand); }
+@media (max-width: 760px) { .gd-two { grid-template-columns: 1fr; } }

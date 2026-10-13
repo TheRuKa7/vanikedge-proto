@@ -5,6 +5,8 @@ import { navToggle, S, $, esc, icon, info, chip, initials, go, bytes, ago, api, 
 import { osShell, uploadFiles } from './os.js';
 
 import { webGate, webAsk, webAskCard, webNote } from './gpt_setup.js';
+import { gptGuide } from './guide.js';
+import { gptOptionsPage } from './os.js';
 const G = { chat: null, chatId: null, streaming: null, draftText: '', newOpts: { model: null, sources: 'all', assistantId: null, effort: 'balanced' }, slashOpen: false, listening: false, rec: null, catalog: null, search: '', searchRes: null, toBottom: false, focus: false, editOf: null, shared: null, sharedKey: '', docs: {}, doc: null, docKey: '', colDocs: {}, hitKey: '' };
 export const gptRouteChanged = () => { G.hitKey = ''; const c = G.chat; if (c && c.temp && location.hash !== '#/gpt/c/' + c.id) api('DELETE', '/api/chats/' + c.id).catch(() => {}); };
 export const sendText = async text => { G.draftText = text; await acts.send(); };
@@ -54,6 +56,7 @@ export function gptShell(active, content) {
     <input class="input" placeholder="Search chats" value="${esc(G.search)}" data-on="chat-search" aria-label="Search chats">
     <div class="chatlist" id="chatlist">${chatList()}</div>
     ${[['assistants', 'Agents', 'smart_toy', '#/gpt/assistants', ['assistants', 'workspace']], ['knowledge', 'Knowledge', 'library_books', '#/gpt/knowledge', ['knowledge']], ['routines', 'Routines', 'bolt', '#/gpt/routines', ['routines', 'flows']], ['tasks', 'Tasks', 'task_alt', '#/gpt/tasks', ['tasks', 'calendar']], ['saved', 'Saved', 'bookmark_border', '#/gpt/saved', ['saved', 'library', 'notes']]].filter(n => inScope(n[3])).map(n => `<a class="nav-item ${n[4].includes(active) ? 'is-active' : ''}" href="${n[3]}">${icon(n[2])}<span class="grow">${n[1]}</span>${n[0] === 'tasks' && B.openTasks ? `<span class="count">${B.openTasks}</span>` : ''}</a>`).join('')}
+    ${B.gptAdmin && B.gptAdmin.can ? `<a class="nav-item ${active === 'manage' ? 'is-active' : ''}" href="#/gpt/manage">${icon('admin_panel_settings')}<span class="grow">Admin</span></a>` : ''}<a class="nav-item ${active === 'guide' ? 'is-active' : ''}" href="#/gpt/guide">${icon('menu_book')}<span class="grow">Guide</span></a>
     <div class="row" style="border-top:1px solid var(--vnk-border);padding-top:10px;margin-top:8px">${userButton()}<span class="right">${themeButton()}</span></div>
   </aside><div class="gpt-main">${content}</div></div>`;
 }
@@ -360,6 +363,7 @@ function pageNew(assistantId) {
       <h1>${as ? esc(as.name) : 'What do you want to get done?'}</h1>${as && as.description ? `<p class="muted" style="text-align:center;margin:-14px 24px 22px">${esc(as.description)}</p>` : ''}
       ${composer()}
       ${as && as.workflow ? `<p style="text-align:center;margin-top:14px"><a class="btn ghost" href="#/gpt/flows/new/${as.workflow}">${icon('fact_check')}Run the full check on files</a></p>` : ''}
+      ${as || seenGuide() ? '' : `<div class="card flat gd-first"><div class="row wrap">${icon('menu_book')}<div class="grow" style="min-width:200px"><b>New here?</b><div class="small muted">What you need, and how to do each thing, in two minutes.</div></div><a class="btn ghost" href="#/gpt/guide">Open the guide</a><button class="btn text" data-act="gd-dismiss">Not now</button></div></div>`}
       <div class="starters">${as ? as.starters.map(s => `<button class="tag" style="padding:7px 12px" data-act="send" data-text="${esc(s)}">${esc(s)}</button>`).join('') : ''}</div>
       ${as ? '' : `<div class="jobs">${starters().map(q => `<button class="job" data-act="send" data-text="${esc(q.text)}"><span class="avatar sq">${icon('library_books')}</span><span class="grow"><span class="small muted">From ${esc(q.from)}</span><b>${esc(q.text)}</b></span>${icon('arrow_forward')}</button>`).join('')}</div>`}
     </div></div>`);
@@ -558,6 +562,12 @@ function pageKnowledge(id) {
     : `<div class="empty">${icon('library_books')}No knowledge yet. ${B.admin ? 'Add documents in Vanik OS so answers can cite them.' : 'Ask an admin to add documents. You can still attach a file to a chat.'}${B.admin ? `<br><a class="btn" href="#/os/knowledge">Open Knowledge base</a>` : ''}</div>`}</div></div>`);
 }
 
+// ---------- the guide, and the admin page for whoever runs VanikGPT
+const seenGuide = () => { try { return localStorage.getItem('vnk.guide.gpt') === '1'; } catch { return true; } }, markGuide = () => { try { localStorage.setItem('vnk.guide.gpt', '1'); } catch { /* private window */ } };
+acts['gd-dismiss'] = () => { markGuide(); rerender(); };
+const plain = (active, title, body) => gptShell(active, `<div class="gpt-top">${navToggle()}<h3 class="grow">${title}</h3></div><div class="scroll" id="scroll"><div class="page">${body}</div></div>`);
+function pageGuide() { markGuide(); return plain('guide', 'Guide', gptGuide()); }
+function pageManage() { const g = S.boot.gptAdmin; return plain('manage', 'Admin', g && g.can ? `<p class="sub" style="margin:0 0 18px">Set once for everyone who uses VanikGPT. The model, the knowledge and the storage are set in the Vanik Edge console.</p>${gptOptionsPage()}` : `<div class="empty">${icon('admin_panel_settings')}${g && g.managed ? 'Only a VanikGPT admin can open this.' : 'VanikGPT is run from the Vanik Edge console.'}${S.boot.admin ? `<br><a class="btn" href="#/os/apps/vanikgpt/setup">Open Setup</a>` : ''}</div>`); }
 export function gptPage(parts) {
   const [a, b, c, d] = parts;
   if (a === 'source') return pageSource(b, c, d || '');
@@ -566,6 +576,8 @@ export function gptPage(parts) {
   if (a === 'shared' && b) return pageShared(b);
   if (a === 'assistants') return b === 'new' ? pageBuilder() : b === 'details' ? pageAssistantForm('new') : b ? pageAssistantForm(b) : (afFor = '', pageAssistants());
   if (a === 'knowledge') return pageKnowledge(b);
+  if (a === 'guide') return pageGuide();
+  if (a === 'manage') return pageManage();
   return pageNew(a === 'new' ? b : null);
 }
 export function gptAfterRender() {

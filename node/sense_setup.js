@@ -9,10 +9,13 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
   const GOALS = ['Capture actions and who owns them', 'Stop taking notes by hand', 'Catch up on meetings I missed', 'Understand customer calls', 'See patterns across many meetings', 'Draft follow-ups', 'Share minutes with my team'];
   const CAPTURE = ['teams', 'upload', 'desktop', 'mic'];
   const SYSTEMS = ['Keka', 'Darwinbox', 'Zoho People', 'greytHR', 'HROne', 'FlexiEle', 'SAP SuccessFactors', 'Workday', 'BambooHR', 'Microsoft Entra ID', 'Google Workspace'];
-  const DEFAULTS = { team: { reach: 'off', detail: 'minutes', dotted: false, never: ['One to one', 'Hiring interview'] }, notice: true, skip: [], upload: true, external: false, exportOn: true, keepDays: 0, score: true };
+  const DEFAULTS = { team: { reach: 'off', detail: 'minutes', dotted: false, never: ['One to one', 'Hiring interview'] }, notice: true, skip: [], upload: true, external: false, exportOn: true, keepDays: 0, score: true,
+    sources: { teams: true, outlook: true, gcal: true, slack: true, zoom: false, mic: true, autoMic: false }, adminAdvanced: false, storage: { kind: 'db', gb: 50 } };
   S.profile = S.profile || {}; S.org = S.org || { people: [], source: '', at: '', by: '' };
-  S.policy = { ...DEFAULTS, ...(S.policy || {}), team: { ...DEFAULTS.team, ...((S.policy || {}).team || {}) } };
+  S.policy = { ...DEFAULTS, ...(S.policy || {}), team: { ...DEFAULTS.team, ...((S.policy || {}).team || {}) }, sources: { ...DEFAULTS.sources, ...((S.policy || {}).sources || {}) }, storage: { ...DEFAULTS.storage, ...((S.policy || {}).storage || {}) } };
   const P = () => S.policy, isAdmin = u => u.role !== 'user' || roleOf(u, 'sense') === 'Sense admin', guard = u => { if (!isAdmin(u)) throw err(403, 'Only a Vanik Sense admin can change this.'); };
+  // Advanced: what a manager can see, reporting lines, how long meetings are kept, sending outside, the score. A console admin always has it; an app admin only when the console gives it.
+  const ADV = ['team', 'keepDays', 'external', 'exportOn', 'score'], top = u => u.role !== 'user', hasAdv = u => top(u) || (isAdmin(u) && P().adminAdvanced), guardAdv = u => { guard(u); if (!hasAdv(u)) throw err(403, 'These settings are kept in the console for this workspace.'); };
   const admins = () => db.users.filter(u => u.role === 'user' && roleOf(u, 'sense') === 'Sense admin').map(u => u.name);
 
   // ---------- the reporting lines
@@ -76,7 +79,8 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
     if (t.detail !== undefined) { if (!['actions', 'minutes', 'transcript'].includes(t.detail)) throw err(400, 'Pick what a manager may see.'); p.team.detail = t.detail; }
     if (t.dotted !== undefined) p.team.dotted = !!t.dotted;
     if (Array.isArray(t.never)) p.team.never = t.never.filter(x => TYPES.includes(x));
-    ['notice', 'upload', 'external', 'exportOn', 'score'].forEach(k => { if (b[k] !== undefined) p[k] = !!b[k]; });
+    ['notice', 'upload', 'external', 'exportOn', 'score', 'adminAdvanced'].forEach(k => { if (b[k] !== undefined) p[k] = !!b[k]; });
+    if (b.sources) Object.keys(DEFAULTS.sources).forEach(k => { if (b.sources[k] !== undefined) p.sources[k] = !!b.sources[k]; });
     if (b.keepDays !== undefined) { if (![0, 90, 180, 365].includes(+b.keepDays)) throw err(400, 'Pick how long meetings are kept.'); p.keepDays = +b.keepDays; }
     if (Array.isArray(b.skip)) p.skip = [...new Set(b.skip.map(x => String(x).trim().toLowerCase()).filter(Boolean))].slice(0, 30);
     return p; };
@@ -97,18 +101,27 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
         // the step that makes capture work, by the way the person chose: Teams needs transcription switched on before the meeting
         ...(cap === 'teams' ? [{ key: 'transcribe', label: 'Switch on transcription in Teams', done: !!p.transcribe || mine > 0, act: 'ss-guide', cta: 'Show me' }] : cap === 'mic' ? [{ key: 'mic', label: 'Let this browser use the microphone', done: !!p.mic, act: 'ss-mic', cta: 'Allow' }] : cap === 'desktop' ? [{ key: 'desktop', label: 'Desktop app: get told when it is ready', done: !!p.desktopNotify, act: 'ss-desktop', cta: 'Open' }] : []),
         { key: 'first', label: 'Get your first meeting in', done: mine > 0, href: '#/app/sense/meetings', cta: 'Add one' }, { key: 'basics', label: 'Learn the basics in one minute', done: !!p.basics, act: 'ss-basics', cta: 'Show me' },
-        ...(adm ? [{ key: 'org', label: 'Load your reporting lines', done: S.org.people.length > 0, href: '#/app/sense/admin', cta: 'Open', admin: true }] : [])];
-      return { steps, left: steps.filter(s => !s.done).length, dept: p.dept || '', level: p.level || '', capture: p.capture || '', transcribe: !!p.transcribe, manager: managerOf(u), watchers: watchers(u), team: teamIds(u).size, rule: { reach: P().team.reach, detail: P().team.detail, never: P().team.never } }; });
-    on('GET', '/api/sense/admin', ({ u }) => { need(u, 'sense'); guard(u); return { policy: P(), org: orgView(), admins: admins(), systems: SYSTEMS, types: TYPES, tenantAdmin: u.role !== 'user' }; });
-    on('PUT', '/api/sense/admin', ({ u, body }) => { need(u, 'sense'); guard(u); const p = cleanPolicy(body || {}); audit(u, 'Changed Vanik Sense settings', Object.keys(body || {}).join(', '), 'Vanik Sense'); return { policy: p }; });
+        ...(adm ? [{ key: 'org', label: 'Load your reporting lines', done: S.org.people.length > 0, href: admins().length ? '#/app/sense/admin' : '#/os/apps/sense/setup', cta: 'Open', admin: true }] : [])];
+      return { steps, left: steps.filter(s => !s.done).length, dept: p.dept || '', level: p.level || '', capture: p.capture || '', transcribe: !!p.transcribe, mic: !!p.mic, sources: P().sources, byHand: P().upload, runBy: admins(), canAdmin: isAdmin(u), tenantAdmin: top(u), role: roleOf(u, 'sense'), calendar: c.some(x => (x.key === 'calendar' || x.key === 'gcal') && x.on), meetings: mine, orgLoaded: S.org.people.length > 0, manager: managerOf(u), watchers: watchers(u), team: teamIds(u).size, rule: { reach: P().team.reach, detail: P().team.detail, never: P().team.never } }; });
+    on('GET', '/api/sense/admin', ({ u }) => { need(u, 'sense'); guard(u); return { policy: P(), org: orgView(), admins: admins(), managed: admins().length > 0, advanced: hasAdv(u), systems: SYSTEMS, types: TYPES, tenantAdmin: top(u), storage: { ...P().storage, meetings: S.meetings.length },
+      people: top(u) ? db.users.filter(x => x.role === 'user').map(x => ({ id: x.id, name: x.name, admin: roleOf(x, 'sense') === 'Sense admin' })) : undefined }; });
+    on('PUT', '/api/sense/admin', ({ u, body }) => { need(u, 'sense'); guard(u); const b = body || {};
+      if (!top(u) && b.adminAdvanced !== undefined) throw err(403, 'Only a console admin decides this.');
+      if (!hasAdv(u) && ADV.some(k => b[k] !== undefined)) throw err(403, 'These settings are kept in the console for this workspace.');
+      const p = cleanPolicy(b); audit(u, 'Changed Vanik Sense settings', Object.keys(body || {}).join(', '), 'Vanik Sense'); return { policy: p }; });
+    on('PUT', '/api/sense/storage', ({ u, body }) => { need(u, 'sense'); if (!top(u)) throw err(403, 'Only a console admin decides where meetings are kept.');
+      const was = P().storage, to = { kind: body.kind === 'local' ? 'local' : 'db', gb: Math.max(1, Math.min(4000, Math.round(+body.gb || was.gb))) };
+      if (to.kind === was.kind && to.gb === was.gb) return { storage: was, removed: 0 };
+      const removed = S.meetings.length; S.meetings.length = 0; P().storage = to;
+      audit(u, 'Changed where meetings are kept', `${to.kind === 'db' ? 'Database' : 'Files on disk'}, ${to.gb} GB`, `Removed ${removed} meetings · Vanik Sense`); return { storage: to, removed }; });
     on('GET', '/api/sense/org', ({ u }) => { need(u, 'sense'); guard(u); return { ...orgView(), rows: tree() }; });
     on('GET', '/api/sense/org/template', ({ u }) => { need(u, 'sense'); return { name: 'vanik-sense-reporting-lines-template.csv', csv: TEMPLATE, columns: [['work_email', 'Needed. One row per person.'], ['manager_email', "Their manager's work email, or their employee ID. Leave empty for the person at the top."], ['dotted_line_managers', 'Any second manager. Several are separated by a semicolon.'], ['employee_id, name, title, department, team, business_unit, location', 'Helpful, not needed.'], ['status', "Rows marked Inactive, Left or Terminated are skipped."]] }; });
-    on('POST', '/api/sense/org/upload', ({ u, body }) => { need(u, 'sense'); guard(u); const r = readOrg(String(body.text || '').slice(0, 6e6));
+    on('POST', '/api/sense/org/upload', ({ u, body }) => { need(u, 'sense'); guardAdv(u); const r = readOrg(String(body.text || '').slice(0, 6e6));
       const report = r.errors.length ? [['row', 'problem'].join(','), ...r.errors.map(e => `${e.row},"${e.text.replace(/"/g, '""')}"`)].join('\n') : '';
       if (!r.errors.length && r.people.length && !body.check) setOrg(u, r.people, 'Sheet: ' + String(body.name || 'uploaded file').slice(0, 80));
       return { ok: !r.errors.length && r.people.length > 0, applied: !r.errors.length && r.people.length > 0 && !body.check, people: r.people.length, managers: new Set(r.people.map(p => p.managerEmail).filter(Boolean)).size, errors: r.errors.slice(0, 200), errorCount: r.errors.length, warnings: r.warnings, report }; });
-    on('POST', '/api/sense/org/connect', ({ u, body }) => { need(u, 'sense'); guard(u); if (!SYSTEMS.includes(body.system)) throw err(400, 'Pick a system from the list.'); const r = readOrg(sampleCsv()); setOrg(u, r.people, body.system); return { ok: true, people: r.people.length, system: body.system }; });
-    on('DELETE', '/api/sense/org', ({ u }) => { need(u, 'sense'); guard(u); setOrg(u, [], ''); S.org.at = ''; return { ok: true }; });
+    on('POST', '/api/sense/org/connect', ({ u, body }) => { need(u, 'sense'); guardAdv(u); if (!SYSTEMS.includes(body.system)) throw err(400, 'Pick a system from the list.'); const r = readOrg(sampleCsv()); setOrg(u, r.people, body.system); return { ok: true, people: r.people.length, system: body.system }; });
+    on('DELETE', '/api/sense/org', ({ u }) => { need(u, 'sense'); guardAdv(u); setOrg(u, [], ''); S.org.at = ''; return { ok: true }; });
   }
   // the sample company: the five people of the sample workspace and four who have no account yet
   function sampleCsv() { const by = n => db.users.find(x => x.name.startsWith(n)), o = db.users.find(x => x.role === 'owner'), m = x => (x ? mailOf(x) : ''), row = (id, x, name, mail, title, dept, team, mgr, dot = '') => [id, x ? x.name : name, x ? m(x) : mail, title, dept, team, 'India', 'Pune', mgr, dot, 'Active'].join(',');

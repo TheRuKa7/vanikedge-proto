@@ -32,6 +32,7 @@ const defaultConfig = () => ({
   tools: { enabled: ['calculator', 'gst', 'tables', 'browser', 'screen'], browserMode: 'allowed', sites: [], signins: [] },
   advanced: { port: 9016, offline: true, telemetry: false, corsOrigin: '' },
   followHub: MVP, link: { mode: 'gateway', url: '', model: '', keySet: false }, web: { on: false, credits: 200 },
+  admin: { users: [], advanced: false }, storage: { kind: 'db', gb: 20 },
 });
 const freshApp = () => ({ status: 'not_installed', port: 9016, image: 'vanik-gpt:v0.11.4-vanik.2', needsGb: 1.6, installedAt: null, installedBy: null, config: defaultConfig(), versions: [], deployedVersion: null, deploys: [] });
 function seed() {
@@ -67,6 +68,7 @@ const PL = { keyGate: () => null, sample() {} };
 const RL = { sample() {} };
 const SN = { sample() {}, fromTranscript: () => '' };
 const SU = { usedGb: () => 0, boot: () => null, sample() {}, canUse: () => false, apps: () => [] };
+const AA = { ADMIN0: { users: [], advanced: false }, STORE0: { kind: 'db', gb: 20 }, cleanAdmin: a => a, cleanStore: s => s, boot: () => null, wipe: () => null };
 const GS = { follow() {}, follows: () => false, custom: () => false, published: () => true, usable: () => true, teams: () => [], boot: () => null, search: () => null };
 const ED = { outsideOn: () => [], isOutside: () => false, callLimit: () => 10, sendsDocs: () => false, askOutside: async () => {} };
 const SYSTEM = { id: 'system', name: 'Vanik OS', role: 'owner', teams: [] };
@@ -353,7 +355,7 @@ function bootstrap(u) {
     chats: db.chats.filter(c => c.userId === u.id && !c.temp && !c.archived && mvpChat(c)).sort((x, y) => y.updatedAt.localeCompare(x.updatedAt)).map(chatRow),
     folders: db.folders.filter(f => f.userId === u.id), flags: PA.flags(), outsideModels: ED.outsideOn(), network: admin && db.edge ? db.edge.network : null,
     users: admin ? db.users : db.users.map(x => ({ id: x.id, name: x.name })),
-    teams: GS.teams(), gptSetup: GS.boot(admin),
+    teams: GS.teams(), gptSetup: GS.boot(admin), gptAdmin: AA.boot(u),
     prompts: db.prompts.filter(q => q.shared || q.userId === u.id), attention: admin ? attention() : [],
     plugins: admin ? AG.PLUGINS : AG.PLUGINS.filter(p => allowed(db.pluginAccess[p.id], u)), toolConnectors: AG.mcpViews().filter(m => admin || allowed((db.mcp.find(x => x.id === m.id) || {}).access, u)), sample: !!db.sample, openTasks: WK.openTasks(u),
     suite: SU.boot(u),
@@ -577,15 +579,17 @@ on('PUT', '/api/app/config', ({ u, body }) => {
     tools: !c.tools ? d.tools : { enabled: (c.tools.enabled || []).filter(x => ['calculator', 'gst', 'tables', 'browser', 'screen'].includes(x)), browserMode: c.tools.browserMode === 'any' ? 'any' : 'allowed', sites: [...new Set((c.tools.sites || []).map(x => String(x).toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0]).filter(x => /^[a-z0-9.-]+$/.test(x)))].slice(0, 100),
       signins: (c.tools.signins || []).map(x => ({ host: String(x.host || '').toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0], kind: x.kind === 'sso' ? 'sso' : 'vault', account: String(x.account || '').trim().slice(0, 80) })).filter(x => /^[a-z0-9.-]+$/.test(x.host)).slice(0, 50) },
     advanced: { port: Math.max(1024, Math.min(65535, +(c.advanced && c.advanced.port) || 9016)), offline: !web.on && !(c.advanced && c.advanced.offline === false), telemetry: !!(c.advanced && c.advanced.telemetry), corsOrigin: String((c.advanced && c.advanced.corsOrigin) || '').trim() },
-    followHub, link, web,
+    followHub, link, web, admin: AA.cleanAdmin(c.admin || a.config.admin), storage: AA.cleanStore(c.storage || a.config.storage),
   };
   if (a.versions[0] && JSON.stringify(a.versions[0].config) === JSON.stringify(cfg)) return { v: a.versions[0].v, unchanged: true };
   const v = (a.versions[0] ? a.versions[0].v : 0) + 1;
   a.versions.unshift({ v, at: now(), by: u.name, note: String(body.note || ''), config: cfg });
+  const store0 = AA.cleanStore(a.config.storage), moved = a.versions.length > 1 && JSON.stringify(store0) !== JSON.stringify(cfg.storage); // a new place or a new size starts empty
   a.config = cfg; a.port = cfg.advanced.port;
   audit(u, 'Saved VanikGPT setup', 'config v' + v, body.note); purge();
+  const wiped = moved ? AA.wipe(u, store0, cfg.storage) : null;
   if (body.deploy) startDeploy(u);
-  return { v };
+  return { v, wiped };
 }, A);
 on('POST', '/api/app/deploy', ({ u }) => { startDeploy(u); return { ok: true }; }, A);
 on('POST', '/api/app/deploy/cancel', ({ u }) => { const d = db.app.deploys[0]; if (!d || d.result) throw err(409, 'Nothing is deploying.'); endDeploy(d, 'cancelled', 'Cancelled by ' + u.name); audit(u, 'Cancelled a deploy', 'config v' + d.v); return { ok: true }; }, A);
@@ -869,6 +873,7 @@ Object.assign(SU, require('./suite')({ db, on, err, uid, now, audit, isAdmin, A,
 Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id), toSense: (...a) => SN.fromTranscript(...a) }));
 Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
 Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
+Object.assign(AA, require('./app_admin')({ db, on, err, audit, isAdmin, needGpt, call: (...a) => call(...a) }));
 Object.assign(GS, require('./gpt_setup')({ db, on, err, now, audit, A, byId, MVP, save, needGpt, suiteApps: () => SU.apps() }));
 Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, probes, issueKey: (...a) => FX.issueKey(...a) }));
 
