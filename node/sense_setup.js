@@ -10,12 +10,16 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
   const CAPTURE = ['teams', 'upload', 'desktop', 'mic'];
   const SYSTEMS = ['Keka', 'Darwinbox', 'Zoho People', 'greytHR', 'HROne', 'FlexiEle', 'SAP SuccessFactors', 'Workday', 'BambooHR', 'Microsoft Entra ID', 'Google Workspace'];
   const DEFAULTS = { team: { reach: 'off', detail: 'minutes', dotted: false, never: ['One to one', 'Hiring interview'] }, notice: true, skip: [], upload: true, external: false, exportOn: true, keepDays: 0, score: true,
-    sources: { teams: true, outlook: true, gcal: true, slack: true, zoom: false, mic: true, autoMic: false }, adminAdvanced: false, storage: { kind: 'db', gb: 50 } };
+    sources: { teams: true, outlook: true, gcal: true, slack: true, zoom: false, mic: true, autoMic: false }, adminAdvanced: false, storage: { store: 'st_db', kind: 'db', gb: 50 },
+    avail: { teams: true, outlook: true, gcal: true, slack: true, zoom: false, upload: true, mic: true, autoMic: false }, join: 'all', recap: 'company' };
   S.profile = S.profile || {}; S.org = S.org || { people: [], source: '', at: '', by: '' };
-  S.policy = { ...DEFAULTS, ...(S.policy || {}), team: { ...DEFAULTS.team, ...((S.policy || {}).team || {}) }, sources: { ...DEFAULTS.sources, ...((S.policy || {}).sources || {}) }, storage: { ...DEFAULTS.storage, ...((S.policy || {}).storage || {}) } };
+  S.policy = { ...DEFAULTS, ...(S.policy || {}), team: { ...DEFAULTS.team, ...((S.policy || {}).team || {}) }, sources: { ...DEFAULTS.sources, ...((S.policy || {}).sources || {}) }, avail: { ...DEFAULTS.avail, ...((S.policy || {}).avail || {}) }, storage: { ...DEFAULTS.storage, ...((S.policy || {}).storage || {}) } };
   const P = () => S.policy, isAdmin = u => u.role !== 'user' || roleOf(u, 'sense') === 'Sense admin', guard = u => { if (!isAdmin(u)) throw err(403, 'Only a Vanik Sense admin can change this.'); };
   // Advanced: what a manager can see, reporting lines, how long meetings are kept, sending outside, the score. A console admin always has it; an app admin only when the console gives it.
   const ADV = ['team', 'keepDays', 'external', 'exportOn', 'score'], top = u => u.role !== 'user', hasAdv = u => top(u) || (isAdmin(u) && P().adminAdvanced), guardAdv = u => { guard(u); if (!hasAdv(u)) throw err(403, 'These settings are kept in the console for this workspace.'); };
+  const guardTop = u => { if (!top(u)) throw err(403, 'Reporting lines are set in the Vanik Edge console.'); };
+  // A way in works when the console has made it available and the app's settings have it switched on.
+  const JOIN = ['all', 'host', 'team', 'manual'], RECAP = ['all', 'company', 'me'], wayOn = k => !!P().avail[k] && (k === 'upload' ? !!P().upload : !!P().sources[k]);
   const admins = () => db.users.filter(u => u.role === 'user' && roleOf(u, 'sense') === 'Sense admin').map(u => u.name);
 
   // ---------- the reporting lines
@@ -81,6 +85,9 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
     if (Array.isArray(t.never)) p.team.never = t.never.filter(x => TYPES.includes(x));
     ['notice', 'upload', 'external', 'exportOn', 'score', 'adminAdvanced'].forEach(k => { if (b[k] !== undefined) p[k] = !!b[k]; });
     if (b.sources) Object.keys(DEFAULTS.sources).forEach(k => { if (b.sources[k] !== undefined) p.sources[k] = !!b.sources[k]; });
+    if (b.avail) Object.keys(DEFAULTS.avail).forEach(k => { if (b.avail[k] !== undefined) p.avail[k] = !!b.avail[k]; });
+    if (b.join !== undefined) { if (!JOIN.includes(b.join)) throw err(400, 'Pick which meetings are read.'); p.join = b.join; }
+    if (b.recap !== undefined) { if (!RECAP.includes(b.recap)) throw err(400, 'Pick who gets the recap.'); p.recap = b.recap; }
     if (b.keepDays !== undefined) { if (![0, 90, 180, 365].includes(+b.keepDays)) throw err(400, 'Pick how long meetings are kept.'); p.keepDays = +b.keepDays; }
     if (Array.isArray(b.skip)) p.skip = [...new Set(b.skip.map(x => String(x).trim().toLowerCase()).filter(Boolean))].slice(0, 30);
     return p; };
@@ -102,26 +109,28 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
         ...(cap === 'teams' ? [{ key: 'transcribe', label: 'Switch on transcription in Teams', done: !!p.transcribe || mine > 0, act: 'ss-guide', cta: 'Show me' }] : cap === 'mic' ? [{ key: 'mic', label: 'Let this browser use the microphone', done: !!p.mic, act: 'ss-mic', cta: 'Allow' }] : cap === 'desktop' ? [{ key: 'desktop', label: 'Desktop app: get told when it is ready', done: !!p.desktopNotify, act: 'ss-desktop', cta: 'Open' }] : []),
         { key: 'first', label: 'Get your first meeting in', done: mine > 0, href: '#/app/sense/meetings', cta: 'Add one' }, { key: 'basics', label: 'Learn the basics in one minute', done: !!p.basics, act: 'ss-basics', cta: 'Show me' },
         ...(adm ? [{ key: 'org', label: 'Load your reporting lines', done: S.org.people.length > 0, href: admins().length ? '#/app/sense/admin' : '#/os/apps/sense/setup', cta: 'Open', admin: true }] : [])];
-      return { steps, left: steps.filter(s => !s.done).length, dept: p.dept || '', level: p.level || '', capture: p.capture || '', transcribe: !!p.transcribe, mic: !!p.mic, sources: P().sources, byHand: P().upload, runBy: admins(), canAdmin: isAdmin(u), tenantAdmin: top(u), role: roleOf(u, 'sense'), calendar: c.some(x => (x.key === 'calendar' || x.key === 'gcal') && x.on), meetings: mine, orgLoaded: S.org.people.length > 0, manager: managerOf(u), watchers: watchers(u), team: teamIds(u).size, rule: { reach: P().team.reach, detail: P().team.detail, never: P().team.never } }; });
-    on('GET', '/api/sense/admin', ({ u }) => { need(u, 'sense'); guard(u); return { policy: P(), org: orgView(), admins: admins(), managed: admins().length > 0, advanced: hasAdv(u), systems: SYSTEMS, types: TYPES, tenantAdmin: top(u), storage: { ...P().storage, meetings: S.meetings.length },
+      return { steps, left: steps.filter(s => !s.done).length, dept: p.dept || '', level: p.level || '', capture: p.capture || '', transcribe: !!p.transcribe, mic: !!p.mic, sources: Object.fromEntries(Object.keys(DEFAULTS.sources).map(k => [k, wayOn(k)])), byHand: wayOn('upload'), runBy: admins(), canAdmin: isAdmin(u), tenantAdmin: top(u), role: roleOf(u, 'sense'), calendar: c.some(x => (x.key === 'calendar' || x.key === 'gcal') && x.on), meetings: mine, orgLoaded: S.org.people.length > 0, manager: managerOf(u), watchers: watchers(u), team: teamIds(u).size, rule: { reach: P().team.reach, detail: P().team.detail, never: P().team.never } }; });
+    on('GET', '/api/sense/admin', ({ u }) => { need(u, 'sense'); guard(u); return { policy: P(), org: orgView(), admins: admins(), managed: admins().length > 0, advanced: hasAdv(u), systems: SYSTEMS, types: TYPES, tenantAdmin: top(u), storage: { ...P().storage, meetings: S.meetings.length }, stores: top(u) ? (db.stores || []).map(x => ({ id: x.id, name: x.name })) : undefined,
       people: top(u) ? db.users.filter(x => x.role === 'user').map(x => ({ id: x.id, name: x.name, admin: roleOf(x, 'sense') === 'Sense admin' })) : undefined }; });
     on('PUT', '/api/sense/admin', ({ u, body }) => { need(u, 'sense'); guard(u); const b = body || {};
-      if (!top(u) && b.adminAdvanced !== undefined) throw err(403, 'Only a console admin decides this.');
+      if (!top(u) && (b.adminAdvanced !== undefined || b.avail !== undefined)) throw err(403, 'Only a console admin decides this.');
       if (!hasAdv(u) && ADV.some(k => b[k] !== undefined)) throw err(403, 'These settings are kept in the console for this workspace.');
       const p = cleanPolicy(b); audit(u, 'Changed Vanik Sense settings', Object.keys(body || {}).join(', '), 'Vanik Sense'); return { policy: p }; });
+    const was0 = () => ({ store: P().storage.kind === 'local' ? 'st_disk' : 'st_db', ...P().storage });
     on('PUT', '/api/sense/storage', ({ u, body }) => { need(u, 'sense'); if (!top(u)) throw err(403, 'Only a console admin decides where meetings are kept.');
-      const was = P().storage, to = { kind: body.kind === 'local' ? 'local' : 'db', gb: Math.max(1, Math.min(4000, Math.round(+body.gb || was.gb))) };
-      if (to.kind === was.kind && to.gb === was.gb) return { storage: was, removed: 0 };
+      const list = db.stores || [], st = list.find(x => x.id === body.store), id = st ? st.id : body.kind === 'local' ? 'st_disk' : body.kind === 'db' ? 'st_db' : was0().store, kind = (list.find(x => x.id === id) || { kind: 'postgres' }).kind === 'postgres' ? 'db' : 'local';
+      const was = was0(), to = { store: id, kind, gb: Math.max(1, Math.min(4000, Math.round(+body.gb || was.gb))) };
+      if (to.store === was.store && to.gb === was.gb) return { storage: was, removed: 0 };
       const removed = S.meetings.length; S.meetings.length = 0; P().storage = to;
-      audit(u, 'Changed where meetings are kept', `${to.kind === 'db' ? 'Database' : 'Files on disk'}, ${to.gb} GB`, `Removed ${removed} meetings · Vanik Sense`); return { storage: to, removed }; });
+      audit(u, 'Changed where meetings are kept', `${(list.find(x => x.id === to.store) || { name: 'Appliance database' }).name}, ${to.gb} GB`, `Removed ${removed} meetings · Vanik Sense`); return { storage: to, removed }; });
     on('GET', '/api/sense/org', ({ u }) => { need(u, 'sense'); guard(u); return { ...orgView(), rows: tree() }; });
     on('GET', '/api/sense/org/template', ({ u }) => { need(u, 'sense'); return { name: 'vanik-sense-reporting-lines-template.csv', csv: TEMPLATE, columns: [['work_email', 'Needed. One row per person.'], ['manager_email', "Their manager's work email, or their employee ID. Leave empty for the person at the top."], ['dotted_line_managers', 'Any second manager. Several are separated by a semicolon.'], ['employee_id, name, title, department, team, business_unit, location', 'Helpful, not needed.'], ['status', "Rows marked Inactive, Left or Terminated are skipped."]] }; });
-    on('POST', '/api/sense/org/upload', ({ u, body }) => { need(u, 'sense'); guardAdv(u); const r = readOrg(String(body.text || '').slice(0, 6e6));
+    on('POST', '/api/sense/org/upload', ({ u, body }) => { need(u, 'sense'); guardTop(u); const r = readOrg(String(body.text || '').slice(0, 6e6));
       const report = r.errors.length ? [['row', 'problem'].join(','), ...r.errors.map(e => `${e.row},"${e.text.replace(/"/g, '""')}"`)].join('\n') : '';
       if (!r.errors.length && r.people.length && !body.check) setOrg(u, r.people, 'Sheet: ' + String(body.name || 'uploaded file').slice(0, 80));
       return { ok: !r.errors.length && r.people.length > 0, applied: !r.errors.length && r.people.length > 0 && !body.check, people: r.people.length, managers: new Set(r.people.map(p => p.managerEmail).filter(Boolean)).size, errors: r.errors.slice(0, 200), errorCount: r.errors.length, warnings: r.warnings, report }; });
-    on('POST', '/api/sense/org/connect', ({ u, body }) => { need(u, 'sense'); guardAdv(u); if (!SYSTEMS.includes(body.system)) throw err(400, 'Pick a system from the list.'); const r = readOrg(sampleCsv()); setOrg(u, r.people, body.system); return { ok: true, people: r.people.length, system: body.system }; });
-    on('DELETE', '/api/sense/org', ({ u }) => { need(u, 'sense'); guardAdv(u); setOrg(u, [], ''); S.org.at = ''; return { ok: true }; });
+    on('POST', '/api/sense/org/connect', ({ u, body }) => { need(u, 'sense'); guardTop(u); if (!SYSTEMS.includes(body.system)) throw err(400, 'Pick a system from the list.'); const r = readOrg(sampleCsv()); setOrg(u, r.people, body.system); return { ok: true, people: r.people.length, system: body.system }; });
+    on('DELETE', '/api/sense/org', ({ u }) => { need(u, 'sense'); guardTop(u); setOrg(u, [], ''); S.org.at = ''; return { ok: true }; });
   }
   // the sample company: the five people of the sample workspace and four who have no account yet
   function sampleCsv() { const by = n => db.users.find(x => x.name.startsWith(n)), o = db.users.find(x => x.role === 'owner'), m = x => (x ? mailOf(x) : ''), row = (id, x, name, mail, title, dept, team, mgr, dot = '') => [id, x ? x.name : name, x ? m(x) : mail, title, dept, team, 'India', 'Pune', mgr, dot, 'Active'].join(',');
@@ -129,5 +138,5 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
       row('E015', by('Neha'), '', '', 'HR Business Partner', 'HR and people', '', m(by('Asha')), m(o)), row('E027', by('Imran'), '', '', 'Buyer', 'Procurement', 'Direct materials', m(by('Rohan'))), row('E006', null, 'Kiran Desai', 'kiran.desai@example.com', 'Plant Head', 'Operations', 'Pune plant', m(o)),
       row('E031', null, 'Meena Pillai', 'meena.pillai@example.com', 'Accounts Executive', 'Finance', 'Payables', m(by('Asha'))), row('E033', null, 'Sunil Joshi', 'sunil.joshi@example.com', 'Shift Supervisor', 'Operations', 'Pune plant', 'kiran.desai@example.com'), row('E040', null, 'Tara Bose', 'tara.bose@example.com', 'Buyer', 'Procurement', 'Indirect', m(by('Rohan')))].join('\n'); }
   function sample(u) { const r = readOrg(sampleCsv()); S.org = { people: r.people, source: 'Sheet: reporting-lines.csv', at: now(), by: u.name }; S.policy.team.reach = 'direct'; }
-  return { routes, sample, isAdmin, teamIds, skipped, expired, policy: P, watchers, managerOf, readOrg, DEPTS };
+  return { routes, sample, isAdmin, wayOn, teamIds, skipped, expired, policy: P, watchers, managerOf, readOrg, DEPTS };
 };

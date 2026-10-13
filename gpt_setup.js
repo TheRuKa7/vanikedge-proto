@@ -8,24 +8,7 @@ const GS = () => S.boot.gptSetup || { follows: false, web: { ...WEB0, left: 0, u
 let D = null, changed = () => {};
 export const bindSetup = (draft, onChange) => { D = draft; changed = onChange; };
 
-// ---------- Setup: how VanikGPT reaches a model
-const FIXED = [['Search over documents', 'The embedding model is chosen once, on the Knowledge page, for every app.'], ['Sign-in secret', 'Made at install and kept in the vault. Never shown, never typed.'], ['Privacy switches', 'Usage reporting to outside is always off.'], ['Other model servers', 'Only the one address above is called.'], ['Trusted proxy and web origin', 'Set to the appliance itself. An extra origin is under Advanced.']];
-export function linkCard(c, B) {
-  const g = GS(), custom = c.link.mode === 'custom', serving = B.models.filter(m => m.kind === 'chat' && m.status === 'serving');
-  return `<div class="card"><div class="card-head"><h3>Model</h3>${info('How VanikGPT reaches a model. Through the gateway, the address and a key for this app are filled in on every deploy.')}<a class="link small right" href="#/os/models">Model Hub</a></div>
-    <div class="seg"><button class="${custom ? '' : 'on'}" data-act="gs-link" data-v="gateway">Vanik API gateway</button><button class="${custom ? 'on' : ''}" data-act="gs-link" data-v="custom">Custom endpoint</button></div>
-    ${custom ? `<div class="banner warn" style="margin-top:12px">${icon('info_outline')}<span>VanikGPT will call this server directly. You lose three things the gateway gives: usage on the API gateway page, a key made and changed for you, and chat following a model when it moves.</span></div>
-      <div class="stack" style="gap:12px;margin-top:12px">
-        <label class="field"><span>Address of the model server ${info('Where an OpenAI style server answers, ending in /v1.')}</span><input class="input mono" id="gs-url" placeholder="http://10.0.0.12:9000/v1" value="${esc(c.link.url)}" data-on="gs-url"></label>
-        <label class="field"><span>Model name ${info('The name that server gives the model. Many servers call it /model.')}</span><input class="input mono" id="gs-model" placeholder="/model" value="${esc(c.link.model)}" data-on="gs-model"></label>
-        <label class="field"><span>Key ${info('Only if that server asks for one. It is kept in the vault and never shown again.')}</span><input class="input" id="gs-key" type="password" autocomplete="off" placeholder="${c.link.keySet ? 'A key is kept. Type a new one to replace it' : 'Leave empty if the server needs none'}" data-on="gs-key"></label>
-        <div class="row"><button class="btn ghost" data-act="gs-test">Test</button><span class="small muted" id="gs-test-out"></span></div>
-      </div>
-      <details class="adv"><summary>${icon('chevron_right')}What is not asked for here</summary><div>${FIXED.map(f => `<div class="set-row"><div class="grow"><div class="lbl">${f[0]}</div><div class="small muted" style="white-space:normal">${f[1]}</div></div>${chip('Set by Vanik Edge', 'line', false)}</div>`).join('')}</div></details>`
-    : g.follows ? `<p class="small muted" style="margin:12px 0 10px">Every chat model that is serving in Model Hub is offered in chat. Nothing is picked a second time here.</p>
-      ${serving.length ? `<div class="stack" style="gap:8px">${serving.map(m => `<div class="set-row"><span class="avatar sq">${esc(m.id.slice(0, 2).toUpperCase())}</span><div class="grow"><div class="lbl">${esc(m.id)}</div><div class="small muted">${m.memGb} GB${m.note ? ' · ' + esc(m.note) : ''}</div></div><button class="tag ${c.defaultModel === m.id ? 'on' : ''}" data-act="cfg-default" data-id="${esc(m.id)}">${c.defaultModel === m.id ? 'Default' : 'Make default'}</button></div>`).join('')}</div>`
-        : `<div class="banner warn">${icon('warning_amber')}<span>No chat model is serving. <a class="link" href="#/os/models">Serve one in Model Hub</a>, and it shows here and in chat.</span></div>`}` : ''}</div>`;
-}
+// ---------- Setup: how VanikGPT reaches a model (the rows are drawn in os.js)
 acts['gs-link'] = el => { if (D.link.mode === el.dataset.v) return; D.link.mode = el.dataset.v; rerender(); };
 ins['gs-url'] = el => { D.link.url = el.value.trim(); changed(); };
 ins['gs-model'] = el => { D.link.model = el.value.trim(); changed(); };
@@ -35,20 +18,7 @@ acts['gs-test'] = async () => { const out = $('#gs-test-out'); try { const r = a
 // ---------- Setup: knowledge is chosen on each knowledge base, not here
 export const appNames = c => { const all = GS().apps; return !c.apps || c.apps === 'all' ? 'Every app' : c.apps.length ? c.apps.map(id => (all.find(a => a.id === id) || { name: id }).name).join(', ') : 'No app'; };
 export const usedBy = (c, id) => c.state !== 'draft' && (!c.apps || c.apps === 'all' || c.apps.includes(id));
-export function knowledgeCard(B) {
-  const mine = B.collections.filter(c => usedBy(c, 'vanikgpt')), g = GS();
-  return `<div class="card"><div class="card-head"><h3>Knowledge</h3>${info('Each knowledge base says which apps may use it. People still only get answers from the ones they are allowed.')}<a class="link small right" href="#/os/knowledge">Manage knowledge</a></div>
-    ${mine.length ? mine.map(c => `<a class="set-row" style="text-decoration:none" href="#/os/knowledge/${c.id}">${icon('library_books')}<div class="grow"><div class="lbl">${esc(c.name)}</div><div class="small muted">${c.docCount} ${c.docCount === 1 ? 'document' : 'documents'}</div></div>${icon('chevron_right')}</a>`).join('') : `<p class="small muted">No published knowledge base is open to VanikGPT yet. <a class="link" href="#/os/knowledge">Make one</a></p>`}
-    ${g.embedModel ? `<p class="small faint" style="margin-top:10px">Search by meaning uses ${esc(g.embedModel)}.</p>` : ''}</div>`;
-}
-
 // ---------- Setup: web search
-export function webCard(c) {
-  const w = GS().web;
-  return `<div class="card"><div class="card-head"><h3>Web search</h3>${info('Off: VanikGPT never goes to the internet and nobody is asked. On: when a question needs the web in a chat where it is off, the person is told VanikGPT will switch it on and that it may use browsing credits.')}</div>
-    <div class="set-row"><div class="grow"><div class="lbl">Let chats search the web</div><div class="small muted" style="white-space:normal">${c.web.on ? 'The question that is searched leaves your network. Your documents do not.' : 'Nothing leaves your network.'}</div></div><button class="switch ${c.web.on ? 'on' : ''}" role="switch" aria-checked="${c.web.on}" data-act="gs-web"></button></div>
-    ${c.web.on ? `<div class="set-row"><div class="grow"><div class="lbl">Browsing credits a month ${info('One search is one credit. When they run out, chats answer without the web until the next month.')}</div><div class="small muted">${w.used} used this month</div></div><input class="input" style="width:110px" type="number" min="0" max="100000" value="${c.web.credits}" data-on="gs-credits"></div>` : ''}</div>`;
-}
 acts['gs-web'] = () => { D.web.on = !D.web.on; if (D.web.on) D.advanced.offline = false; rerender(); };
 ins['gs-credits'] = el => { D.web.credits = Math.max(0, Math.round(+el.value || 0)); changed(); };
 

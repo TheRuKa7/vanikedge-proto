@@ -28,11 +28,11 @@ const cleanAccess = a => { const L = v => [...new Set(v || [])].map(String), den
 // ---------- state
 const defaultConfig = () => ({
   models: [], defaultModel: null, instructions: '', collections: 'all', access: { mode: 'everyone', teams: [], users: [] },
-  safety: { pii: 'mask', retentionDays: 0, uploads: true, blockedTopics: [], maskDocuments: false, dailyLimit: 0, voice: false, adminChats: false },
+  safety: { pii: MVP ? 'off' : 'mask', retentionDays: 0, uploads: true, blockedTopics: [], maskDocuments: false, dailyLimit: 0, voice: false, adminChats: false },
   tools: { enabled: ['calculator', 'gst', 'tables', 'browser', 'screen'], browserMode: 'allowed', sites: [], signins: [] },
   advanced: { port: 9016, offline: true, telemetry: false, corsOrigin: '' },
   followHub: MVP, link: { mode: 'gateway', url: '', model: '', keySet: false }, web: { on: false, credits: 200 },
-  admin: { users: [], advanced: false }, storage: { kind: 'db', gb: 20 },
+  admin: { users: [], advanced: false }, storage: { store: 'st_db', kind: 'db', gb: 20 }, features: { connectors: false, images: false, video: false }, data: { personal: true, quotaMb: 500, tempChats: false },
 });
 const freshApp = () => ({ status: 'not_installed', port: 9016, image: 'vanik-gpt:v0.11.4-vanik.2', needsGb: 1.6, installedAt: null, installedBy: null, config: defaultConfig(), versions: [], deployedVersion: null, deploys: [] });
 function seed() {
@@ -68,7 +68,7 @@ const PL = { keyGate: () => null, sample() {} };
 const RL = { sample() {} };
 const SN = { sample() {}, fromTranscript: () => '' };
 const SU = { usedGb: () => 0, boot: () => null, sample() {}, canUse: () => false, apps: () => [] };
-const AA = { ADMIN0: { users: [], advanced: false }, STORE0: { kind: 'db', gb: 20 }, cleanAdmin: a => a, cleanStore: s => s, boot: () => null, wipe: () => null };
+const AA = { cleanAdmin: a => a, cleanStore: s => s, cleanFeatures: f => f, cleanData: d => d, boot: () => null, wipe: () => null, quota() {} };
 const GS = { follow() {}, follows: () => false, custom: () => false, published: () => true, usable: () => true, teams: () => [], boot: () => null, search: () => null };
 const ED = { outsideOn: () => [], isOutside: () => false, callLimit: () => 10, sendsDocs: () => false, askOutside: async () => {} };
 const SYSTEM = { id: 'system', name: 'Vanik OS', role: 'owner', teams: [] };
@@ -579,8 +579,9 @@ on('PUT', '/api/app/config', ({ u, body }) => {
     tools: !c.tools ? d.tools : { enabled: (c.tools.enabled || []).filter(x => ['calculator', 'gst', 'tables', 'browser', 'screen'].includes(x)), browserMode: c.tools.browserMode === 'any' ? 'any' : 'allowed', sites: [...new Set((c.tools.sites || []).map(x => String(x).toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0]).filter(x => /^[a-z0-9.-]+$/.test(x)))].slice(0, 100),
       signins: (c.tools.signins || []).map(x => ({ host: String(x.host || '').toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0], kind: x.kind === 'sso' ? 'sso' : 'vault', account: String(x.account || '').trim().slice(0, 80) })).filter(x => /^[a-z0-9.-]+$/.test(x.host)).slice(0, 50) },
     advanced: { port: Math.max(1024, Math.min(65535, +(c.advanced && c.advanced.port) || 9016)), offline: !web.on && !(c.advanced && c.advanced.offline === false), telemetry: !!(c.advanced && c.advanced.telemetry), corsOrigin: String((c.advanced && c.advanced.corsOrigin) || '').trim() },
-    followHub, link, web, admin: AA.cleanAdmin(c.admin || a.config.admin), storage: AA.cleanStore(c.storage || a.config.storage),
+    followHub, link, web, admin: AA.cleanAdmin(c.admin || a.config.admin), storage: AA.cleanStore(c.storage || a.config.storage), features: AA.cleanFeatures(c.features || a.config.features), data: AA.cleanData(c.data || a.config.data),
   };
+  if (cfg.advanced.offline) cfg.features.connectors = false; // air-gapped: nothing that needs the internet
   if (a.versions[0] && JSON.stringify(a.versions[0].config) === JSON.stringify(cfg)) return { v: a.versions[0].v, unchanged: true };
   const v = (a.versions[0] ? a.versions[0].v : 0) + 1;
   a.versions.unshift({ v, at: now(), by: u.name, note: String(body.note || ''), config: cfg });
@@ -671,7 +672,7 @@ on('GET', '/api/shared/:id', ({ u, p }) => {
   return { asAdmin, id: c.id, title: c.title, mine: c.userId === u.id, ownerName: (db.users.find(x => x.id === c.userId) || { name: 'Removed user' }).name, messages: c.messages.map(m => ({ id: m.id, role: m.role, content: m.content, at: m.at, citations: m.citations || [], mode: m.mode, notice: m.notice, model: m.model, pii: m.pii, piiMode: m.piiMode })) };
 });
 on('DELETE', '/api/chats/:id', ({ u, p }) => { const c = myChat(u, p.id); db.chats = db.chats.filter(x => x.id !== c.id); db.documents = db.documents.filter(d => d.collectionId !== 'chat:' + c.id); audit(u, 'Deleted a chat'); return { ok: true }; });
-on('POST', '/api/chats/:id/files', ({ u, p, body }) => { needGpt(u); const c = myChat(u, p.id); if (!db.app.config.safety.uploads) throw err(403, 'Your admin has turned off file uploads in chat.'); const d = addDocument(u, 'chat:' + c.id, body); c.updatedAt = now(); audit(u, 'Attached a file in chat', d.name); return docView(d); });
+on('POST', '/api/chats/:id/files', ({ u, p, body }) => { needGpt(u); const c = myChat(u, p.id); if (!db.app.config.safety.uploads) throw err(403, 'Your admin has turned off file uploads in chat.'); AA.quota(u, body.size); const d = addDocument(u, 'chat:' + c.id, body); c.updatedAt = now(); audit(u, 'Attached a file in chat', d.name); return docView(d); });
 on('GET', '/api/chats/:id/export', ({ u, p }) => {
   const c = myChat(u, p.id); audit(u, 'Exported a chat');
   return { name: c.title.replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'chat', markdown: `# ${c.title}\n\n` + c.messages.map(m => `**${m.role === 'user' ? u.name : 'VanikGPT'}** · ${m.at.slice(0, 16).replace('T', ' ')}\n\n${m.content}` + ((m.citations || []).length ? '\n\nSources:\n' + m.citations.map(x => `- [${x.n}] ${x.docName}${x.page ? ', page ' + x.page : ''}`).join('\n') : '')).join('\n\n---\n\n') + '\n' };
@@ -873,7 +874,7 @@ Object.assign(SU, require('./suite')({ db, on, err, uid, now, audit, isAdmin, A,
 Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id), toSense: (...a) => SN.fromTranscript(...a) }));
 Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
 Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
-Object.assign(AA, require('./app_admin')({ db, on, err, audit, isAdmin, needGpt, call: (...a) => call(...a) }));
+Object.assign(AA, require('./app_admin')({ db, on, err, audit, isAdmin, needGpt, A, uid, now, call: (...a) => call(...a) }));
 Object.assign(GS, require('./gpt_setup')({ db, on, err, now, audit, A, byId, MVP, save, needGpt, suiteApps: () => SU.apps() }));
 Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, probes, issueKey: (...a) => FX.issueKey(...a) }));
 

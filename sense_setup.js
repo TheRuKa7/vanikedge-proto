@@ -3,7 +3,7 @@
 // so the Vanik Edge console shows exactly the same options when no product admin is named. Server side: sense_setup.js.
 import { S, $, esc, icon, info, chip, go, ago, api, load, rerender, acts, ins, toast, modal, confirmBox, downloadText, LOGO } from './core.js';
 import { get, P } from './suite.js';
-import { openApp, whoRuns, storageCard } from './app_admin.js';
+import { crow, sw, dd, runByDd, accessDd, storageRow } from './app_admin.js';
 
 const loading = '<p class="muted">Loading…</p>';
 const fresh = (...s) => s.forEach(k => { P[k + 'Key'] = ''; });
@@ -121,56 +121,73 @@ acts['sa-load'] = async () => { const r = await api('POST', '/api/sense/org/uplo
 acts['sa-upload'] = () => { draft = null; modal({ title: 'Upload your reporting lines', wide: true, cancel: 'Close', text: 'A sheet saved as CSV, one row for each person. It is checked first; nothing is loaded until it is clean.', body: `<div class="row" style="gap:8px"><label class="btn" style="cursor:pointer">${icon('upload_file')}Choose the file<input type="file" accept=".csv,text/csv" hidden data-change="sa-file"></label><button class="btn ghost" data-act="sa-template">${icon('download')}Get the template</button></div><div id="sa-res" style="margin-top:16px"></div>` }); };
 acts['sa-connect'] = () => { const a = P.snAdm; modal({ title: 'Connect your HR system', text: 'Sense reads each person\'s name, work email, title, department and manager, once a day. Nothing else, and it writes nothing back.', body: `<select class="input" id="sa-sys">${a.systems.map(s => `<option>${esc(s)}</option>`).join('')}</select><p class="small muted" style="margin-top:10px">${icon('info')} In this preview, connecting loads sample people. In the product you sign in to the HR system and approve read access.</p>`, actions: [{ label: 'Connect', run: async o => { const r = await api('POST', '/api/sense/org/connect', { system: $('#sa-sys', o).value }); toast(`${r.people} people read from ${r.system}.`); fresh('snAdm', 'snOrg', 'snSetup', 'snList', 'snHome'); rerender(); } }] }); };
 acts['sa-clear'] = () => confirmBox('Remove the reporting lines?', 'Managers stop seeing their teams\' meetings until the lines are loaded again. Meetings are not touched.', 'Remove', async () => { await api('DELETE', '/api/sense/org'); fresh('snAdm', 'snOrg', 'snSetup', 'snList', 'snHome'); rerender(); }, true);
-const WAYS = [['teams', 'Microsoft Teams', 'Meetings, and the transcript Teams makes.'], ['outlook', 'Outlook calendar and mail', 'Coming meetings, and where summaries are sent from.'], ['gcal', 'Google Calendar', 'Coming meetings kept in Google.'], ['slack', 'Slack', 'Minutes to a channel, reminders as a message.'], ['zoom', 'Zoom', 'Meetings held in Zoom, with the transcript Zoom makes.'],
-  ['upload', 'Notes and transcripts by hand', 'Typed, pasted or dropped as a file after any call.'], ['mic', 'Record on this computer', 'The browser\'s microphone, for a call on speaker or in a room.'], ['autoMic', 'Start by itself when a call begins', 'When the microphone turns on in a call, Sense offers to transcribe it. Needs the desktop app, which is not ready yet.']];
-const SS = { kind: '', gb: 0, for: '' }; // the storage choice being edited, before Apply
+// the ways a call can reach Vanik Sense: [key, one or two words, what it does]
+const WAYS = [['teams', 'Teams', 'Meetings held in Microsoft Teams, and the transcript Teams makes.'], ['outlook', 'Outlook', 'The Outlook calendar for coming meetings, and Outlook mail for sending summaries.'], ['gcal', 'Google Calendar', 'Coming meetings kept in Google Calendar.'], ['slack', 'Slack', 'Minutes posted to a channel, and reminders sent as a message.'], ['zoom', 'Zoom', 'Meetings held in Zoom, with the transcript Zoom makes.'],
+  ['upload', 'By hand', 'Notes and transcripts typed, pasted or dropped as a file after any call.'], ['mic', 'This computer', 'Recording through the browser\'s microphone, for a call on speaker or a meeting in a room.'], ['autoMic', 'Auto start', 'When the microphone turns on in a call, Sense offers to transcribe it. Needs the desktop app, which is not ready yet.']];
+const JOIN = [['all', 'Every meeting with a transcript'], ['host', 'Only meetings the person hosts'], ['team', 'Only meetings with people from the company'], ['manual', 'Only meetings the person adds']];
+const RECAP = [['all', 'Everyone invited'], ['company', 'Only people from the company'], ['me', 'Only the host']];
+const SS = { store: '', gb: 0, for: '' }; // the storage choice being edited, before Apply
 export function adminPanel(where = 'product') {
   const a = get('snAdm', 'a', '/api/sense/admin'); if (!a) return loading;
-  const p = a.policy, t = p.team, o = a.org, sw = (k, on, label) => `<button class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${!!on}" aria-label="${esc(label)}" data-act="sa-sw" data-k="${k}" ${on ? 'data-on="1"' : ''}></button>`;
-  const row = (label, sub, right) => `<div class="set-row"><div class="grow"><div class="lbl">${label}</div>${sub ? `<div class="small muted" style="white-space:normal">${sub}</div>` : ''}</div>${right}</div>`;
+  const p = a.policy, t = p.team, o = a.org, on = k => (k === 'upload' ? p.upload : p.sources[k]), avail = WAYS.filter(w => p.avail[w[0]]);
   const seg = (act, cur, opts) => `<div class="seg">${opts.map(x => `<button class="${cur === x[0] ? 'on' : ''}" data-act="${act}" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>`;
-  const orgHref = '#/app/sense/admin/org', sect = x => `<div class="cap" style="margin:10px 0 -6px">${x}</div>`;
-  const on = k => (k === 'upload' ? p.upload : p.sources[k]);
-  const cWays = `<div class="card"><div class="card-head"><h3>Ways in</h3>${info('How a call may reach Vanik Sense in your company. A person connects only what is switched on here.')}</div>${WAYS.map(w => row(w[1], w[2], `<button class="switch ${on(w[0]) ? 'on' : ''}" role="switch" aria-checked="${!!on(w[0])}" aria-label="${esc(w[1])}" data-act="sa-src" data-k="${w[0]}" ${on(w[0]) ? 'data-on="1"' : ''}></button>`)).join('')}</div>`;
-  const cMeetings = `<div class="card"><div class="card-head"><h3>Meetings</h3></div>
-      ${row('Tell everyone in the meeting', 'A message in the meeting chat says it is being transcribed by Vanik Sense.', sw('notice', p.notice, 'Notice'))}
-      ${row('Skip meetings with these words in the title', `<span class="row wrap" style="gap:6px;margin-top:6px">${p.skip.map(k => `<span class="tag">${esc(k)}<button data-act="sa-skip-del" data-v="${esc(k)}" aria-label="Remove ${esc(k)}">${icon('close')}</button></span>`).join('')}<input class="input" style="width:200px;height:30px" placeholder="Add a word, press Enter" data-change="sa-skip" aria-label="Add a word"></span>`, '')}
-      </div>`, cOrg = `<div class="card"><div class="card-head"><h3>Reporting lines</h3>${info('Who reports to whom. It decides whose meetings a manager can see, and powers team views. Load it from a sheet or read it from your HR system.')}</div>
-      ${o.count ? `${row(`${o.count} people, ${o.managers} managers, ${o.levels} levels`, `${esc(o.source)} · ${ago(o.at)} by ${esc(o.by)}${o.noAccount ? ` · ${o.noAccount} have no account yet` : ''}`, `<a class="btn ghost" href="${orgHref}">See the lines</a>`)}<div class="row wrap" style="gap:8px;margin-top:12px"><button class="btn ghost" data-act="sa-upload">${icon('upload_file')}Upload a new sheet</button><button class="btn ghost" data-act="sa-connect">${icon('sync')}Connect your HR system</button><button class="btn text" data-act="sa-clear">Remove</button></div>`
-      : `${motion([['table_chart', 'Your sheet or HR system'], ['account_tree', 'Reporting lines'], ['visibility', 'Managers see their teams']])}<p class="muted" style="text-align:center">Nothing is loaded yet, so every meeting is seen only by the people who were in it.</p><div class="row wrap" style="gap:8px;justify-content:center;margin-top:14px"><button class="btn" data-act="sa-upload">${icon('upload_file')}Upload a sheet</button><button class="btn ghost" data-act="sa-template">${icon('download')}Get the template</button><button class="btn ghost" data-act="sa-connect">${icon('sync')}Connect your HR system</button></div>`}</div>`, cManager = `<div class="card"><div class="card-head"><h3>What a manager can see</h3>${info('A manager sees the meetings of the people below them as team meetings, read-only. People are told who can see theirs, and every opening is recorded.')}</div>
-      ${row('Whose meetings', o.count ? '' : 'Needs the reporting lines above.', seg('sa-reach', t.reach, [['off', 'Nobody\'s'], ['direct', 'Direct reports'], ['two', 'Two levels down'], ['all', 'Everyone below']]))}
-      ${t.reach === 'off' ? '' : `${row('How much', '', seg('sa-detail', t.detail, [['actions', 'Actions only'], ['minutes', 'Minutes and actions'], ['transcript', 'Everything']]))}
-      ${row('Never these kinds of call', 'They stay with the people who were in them.', `<div class="row wrap" style="gap:6px;justify-content:flex-end;max-width:420px">${a.types.map(k => `<button class="toggle ${t.never.includes(k) ? 'on' : ''}" data-act="sa-never" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>`)}
-      ${row('Count a second manager too', 'A dotted-line manager sees the same as the main one.', sw('dotted', t.dotted, 'Second manager'))}`}</div>`, cSharing = `<div class="card"><div class="card-head"><h3>Sharing and data</h3></div>
-      ${row('Forward minutes outside the company', 'Off: a summary can go only to a company address.', sw('external', p.external, 'Outside the company'))}
-      ${row('Send minutes to Teams and Slack', '', sw('exportOn', p.exportOn, 'Send out'))}
-      ${row('Keep meetings for', 'Older meetings stop being shown.', `<select class="input" style="width:auto" data-change="sa-keep" aria-label="Keep meetings for">${[[0, 'Always'], [365, '1 year'], [180, '180 days'], [90, '90 days']].map(x => `<option value="${x[0]}" ${p.keepDays === x[0] ? 'selected' : ''}>${x[1]}</option>`).join('')}</select>`)}
-      ${row('Customer confidence score', 'Off: customer calls still show what was asked for and what to do next, without a number.', sw('score', p.score, 'Score'))}
-      ${row('Sound recordings', 'Never kept. Vanik Sense keeps the words only.', chip('Always', 'ok', false))}${row('Training of models on your meetings', 'Never.', chip('Always', 'ok', false))}</div>`;
-  const advanced = `${cOrg}\n${cManager}\n${cSharing}`;
+  const pick = (act, cur, opts, label) => `<select class="input" style="width:auto;max-width:280px" data-change="${act}" aria-label="${label}">${opts.map(x => `<option value="${x[0]}" ${String(cur) === String(x[0]) ? 'selected' : ''}>${x[1]}</option>`).join('')}</select>`;
+  const basic = `<div class="cap">Ways in</div>
+    ${avail.length ? avail.map(w => crow(w[1], w[2], sw('sa-src', on(w[0]), w[0]))).join('') : `<p class="small muted">No way in is made available in the Vanik Edge console yet.</p>`}
+    <div class="cap">Meetings</div>
+    ${crow('Which meetings', 'Which of a person\'s meetings Vanik Sense reads. A person can still switch one meeting off.', pick('sa-join', p.join, JOIN, 'Which meetings'))}
+    ${crow('Recap to', 'Who gets the summary by email when a meeting has been read.', pick('sa-recap', p.recap, RECAP, 'Recap to'))}
+    ${crow('Notice', 'A message in the meeting chat tells everyone it is being transcribed by Vanik Sense.', sw('sa-sw', p.notice, 'notice'))}
+    ${crow('Skip words', 'A meeting with one of these words in its title is not read.', `<span class="row wrap" style="gap:6px;justify-content:flex-end">${p.skip.map(k => `<span class="tag">${esc(k)}<button data-act="sa-skip-del" data-v="${esc(k)}" aria-label="Remove ${esc(k)}">${icon('close')}</button></span>`).join('')}<input class="input" style="width:190px;height:32px" placeholder="Add a word, press Enter" data-change="sa-skip" aria-label="Add a word"></span>`)}`;
+  const advanced = `<div class="cap">Sharing and data</div>
+    ${crow('Outside company', 'Off: minutes can be forwarded only to a company address.', sw('sa-sw', p.external, 'external'))}
+    ${crow('Teams and Slack', 'Lets people send minutes to a Teams chat or a Slack channel.', sw('sa-sw', p.exportOn, 'exportOn'))}
+    ${crow('Keep for', 'Older meetings stop being shown. Sound is never kept, only the words.', pick('sa-keep', p.keepDays, [[0, 'Always'], [365, '1 year'], [180, '180 days'], [90, '90 days']], 'Keep meetings for'))}
+    ${crow('Confidence score', 'Off: a customer call still shows what was asked for and what to do next, without a number.', sw('sa-sw', p.score, 'score'))}
+    <div class="cap">Manager view</div>
+    ${crow('Whose meetings', `A manager sees the meetings of the people below them, read-only. People are told who can see theirs, and every opening is recorded.${o.count ? '' : ' Needs the reporting lines, which are loaded in the console.'}`, seg('sa-reach', t.reach, [['off', 'Nobody\'s'], ['direct', 'Direct reports'], ['two', 'Two levels'], ['all', 'Everyone below']]))}
+    ${t.reach === 'off' ? '' : `${crow('How much', 'What a manager sees of a meeting they were not in.', seg('sa-detail', t.detail, [['actions', 'Actions'], ['minutes', 'Minutes'], ['transcript', 'Everything']]))}
+    ${crow('Never', 'These kinds of call stay with the people who were in them.', `<div class="row wrap" style="gap:6px;justify-content:flex-end;max-width:460px">${a.types.map(k => `<button class="toggle ${t.never.includes(k) ? 'on' : ''}" data-act="sa-never" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>`)}
+    ${crow('Second manager', 'A dotted-line manager sees the same as the main one.', sw('sa-sw', t.dotted, 'dotted'))}`}`;
+  const options = adv => `<div class="card setc"><div class="card-head"><h3>App options</h3></div>${basic}${adv ? advanced : ''}</div>`;
   if (where !== 'console') { // inside Vanik Sense: only when an app admin runs it
     if (!a.managed) return `<div class="empty">${icon('admin_panel_settings')}Vanik Sense is run from the Vanik Edge console.${a.tenantAdmin ? `<br><a class="btn" href="#/os/apps/sense/setup">Open Setup</a>` : ''}</div>`;
-    return `<div class="stack" style="gap:16px;max-width:860px">${cWays}${cMeetings}${a.advanced ? advanced : `<p class="small muted">${icon('lock')} Reporting lines, what a manager can see, and sharing and data are kept in the Vanik Edge console.</p>`}</div>`;
+    return `<div class="stack" style="gap:16px;max-width:860px">${options(a.advanced)}${a.advanced ? '' : `<p class="small muted">${icon('lock')} Sharing and data, and what a manager can see, are kept in the Vanik Edge console. Reporting lines are always set there.</p>`}</div>`;
   }
-  const picked = (a.people || []).filter(x => x.admin).map(x => x.id), st = a.storage, edit = SS.for === st.kind + st.gb ? SS : Object.assign(SS, { kind: st.kind, gb: st.gb, for: st.kind + st.gb });
-  const lost = `${st.meetings} ${st.meetings === 1 ? 'meeting' : 'meetings'} kept so far`;
+  const people = a.people || [], picked = people.filter(x => x.admin).map(x => x.id), st = { store: 'st_db', ...a.storage }, key = st.store + st.gb, edit = SS.for === key ? SS : Object.assign(SS, { store: st.store, gb: st.gb, for: key });
+  const sv = get('snSuite', 'x', '/api/suite'), app = sv && sv.apps.find(x => x.id === 'sense');
   return `<div class="stack" style="gap:16px;max-width:860px">
-    ${whoRuns({ p: 'sa-admin', app: 'sense', name: 'Vanik Sense', people: a.people || [], picked, advanced: p.adminAdvanced, options: 'the ways in and the meeting rules', keeps: 'the model, the storage and who can use it', href: '#/app/sense/admin' })}
-    ${sect('Set in the console')}
-    <div class="card">${[['People, teams and sign-in', '#/os/people'], ['The model that reads the meetings', '#/os/models'], ['Who can use Vanik Sense', '#/os/apps/sense/people']].map(x => row(x[0], 'Set once for every product on this appliance.', `<a class="btn text" href="${x[1]}">Open</a>`)).join('')}</div>
-    ${storageCard({ p: 'sa-store', store: { kind: edit.kind, gb: edit.gb }, saved: st, used: {}, things: 'meetings, their minutes and their transcripts', lost })}
-    ${a.managed ? (p.adminAdvanced ? '' : `${sect('Advanced, kept in the console')}${advanced}`) : `${sect('App options')}${cWays}${cMeetings}${advanced}`}</div>`;
+    <div class="card setc"><div class="card-head"><h3>Set in the console</h3></div>
+      ${crow('Run by', 'Console admins: the app options are on this page. An app admin: they are inside Vanik Sense and leave this page.', `${a.managed ? `<span class="small muted">Advanced too</span>${info('Off: sharing and data, and what a manager can see, stay on this page. On: the app admin has them, and they leave this page.')}${sw('sa-admin-adv', p.adminAdvanced)}` : ''}${runByDd({ key: 'sn-run', p: 'sa-admin', people, picked })}`)}
+      ${crow('Model', 'The model that reads the meetings is the one serving in Model Hub.', `<a class="btn text" href="#/os/models">Model Hub</a>`)}
+      ${storageRow({ p: 'sa-store', store: { store: edit.store, gb: edit.gb }, saved: st, stores: a.stores, lost: `the ${st.meetings} ${st.meetings === 1 ? 'meeting' : 'meetings'} kept so far`, apply: 'sa-store-save' })}
+      ${crow('People', 'Who can use Vanik Sense.', app ? accessDd({ key: 'sn-acc', p: 'sa-acc', access: app.access, teams: S.boot.teams, people: S.boot.users.filter(u => u.role === 'user') }) : loading)}
+      ${crow('Ways in', 'Which ways in this company has set up. Only these can be switched on in the app options, and only those can be connected by a person.', dd('sn-avail', avail.length ? esc(avail.map(w => w[1]).join(', ')) : 'None', WAYS.map(w => ({ label: w[1], on: !!p.avail[w[0]], act: 'sa-avail', v: w[0] }))))}
+      ${crow('Reporting lines', 'Who reports to whom. It decides whose meetings a manager can see. Set here only, from a sheet or your HR system.', o.count ? `<span class="muted">${o.count} people · ${o.levels} levels</span><a class="btn text" href="#/app/sense/admin/org">See</a><button class="btn text" data-act="sa-upload">Replace</button><button class="btn text" data-act="sa-clear">Remove</button>` : `<button class="btn text" data-act="sa-template">Template</button><button class="btn text" data-act="sa-connect">HR system</button><button class="btn ghost" data-act="sa-upload">${icon('upload_file')}Upload a sheet</button>`)}
+    </div>
+    ${a.managed ? (p.adminAdvanced ? '' : `<div class="card setc"><div class="card-head"><h3>Advanced</h3>${chip('Kept in the console', '', false)}</div>${advanced}</div>`) : options(true)}</div>`;
 }
 acts['sa-src'] = el => (el.dataset.k === 'upload' ? save({ upload: !el.dataset.on }, ['snSet']) : save({ sources: { [el.dataset.k]: !el.dataset.on } }, ['snSet', 'snMeet']));
+acts['sa-avail'] = el => save({ avail: { [el.dataset.v]: !P.snAdm.policy.avail[el.dataset.v] } }, ['snSet', 'snMeet']);
+ins['sa-join'] = el => save({ join: el.value });
+ins['sa-recap'] = el => save({ recap: el.value });
 // who runs Vanik Sense: an app admin is a person with the role "Sense admin"
+const suitePut = async body => { try { await api('PUT', '/api/suite/apps/sense/access', body); } catch (e) { toast(e.message, 'err'); } fresh('snAdm', 'snSetup', 'snSuite'); await load(); rerender(); };
 const setAdmins = async ids => { const sv = await api('GET', '/api/suite'), app = sv.apps.find(x => x.id === 'sense'), roles = { ...(app.roles || {}) }; Object.keys(roles).forEach(k => { if (roles[k] === 'Sense admin') delete roles[k]; }); ids.forEach(id => { roles['u:' + id] = 'Sense admin'; });
-  try { await api('PUT', '/api/suite/apps/sense/access', { roles }); if (!ids.length) await api('PUT', '/api/sense/admin', { adminAdvanced: false }); } catch (e) { toast(e.message, 'err'); } fresh('snAdm', 'snSetup', 'suite'); await load(); rerender(); };
-acts['sa-admin-mode'] = el => { openApp.sense = el.dataset.v === 'app'; if (!openApp.sense && (P.snAdm.people || []).some(x => x.admin)) return setAdmins([]); rerender(); };
+  if (!ids.length) { try { await api('PUT', '/api/sense/admin', { adminAdvanced: false }); } catch { /* already off */ } } return suitePut({ roles }); };
+acts['sa-admin-none'] = () => setAdmins([]);
 acts['sa-admin-pick'] = el => { const cur = (P.snAdm.people || []).filter(x => x.admin).map(x => x.id), id = el.dataset.v; return setAdmins(cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]); };
 acts['sa-admin-adv'] = () => save({ adminAdvanced: !P.snAdm.policy.adminAdvanced });
-acts['sa-store-kind'] = el => { SS.kind = el.dataset.v; rerender(); };
+// who can use Vanik Sense
+const accNow = () => { const x = P.snSuite && P.snSuite.apps.find(y => y.id === 'sense'); return JSON.parse(JSON.stringify((x && x.access) || { mode: 'everyone', teams: [], users: [] })); };
+const accPut = a => suitePut({ access: { ...a, mode: a.teams.length + a.users.length ? 'restricted' : 'everyone' } });
+const flip = (l, v) => (l.includes(v) ? l.filter(x => x !== v) : [...l, v]);
+acts['sa-acc-all'] = () => accPut({ ...accNow(), teams: [], users: [] });
+acts['sa-acc-team'] = el => { const a = accNow(); return accPut({ ...a, teams: flip(a.mode === 'everyone' ? [] : a.teams, el.dataset.v), users: a.mode === 'everyone' ? [] : a.users }); };
+acts['sa-acc-user'] = el => { const a = accNow(); return accPut({ ...a, users: flip(a.mode === 'everyone' ? [] : a.users, el.dataset.v), teams: a.mode === 'everyone' ? [] : a.teams }); };
+ins['sa-store'] = el => { SS.store = el.value; rerender(); };
 ins['sa-store-gb'] = el => { SS.gb = Math.max(1, Math.min(4000, Math.round(+el.value || SS.gb))); rerender(); };
-acts['sa-store-save'] = () => { const n = P.snAdm.storage.meetings; confirmBox('Change the storage?', `A new place or a new size starts empty. ${n} ${n === 1 ? 'meeting' : 'meetings'} kept so far, with their minutes and actions, are removed for everyone. This cannot be undone.`, 'Remove and save', async () => { const r = await api('PUT', '/api/sense/storage', { kind: SS.kind, gb: SS.gb }); SS.for = ''; toast(`Saved. ${r.removed} meetings were removed.`); fresh('snAdm', 'snSetup', 'snHome', 'snList', 'snMeet', 'snIns'); rerender(); }); };
+acts['sa-store-save'] = () => { const n = P.snAdm.storage.meetings; confirmBox('Change the storage?', `A new store or a new size starts empty. ${n} ${n === 1 ? 'meeting' : 'meetings'} kept so far, with their minutes and actions, are removed for everyone. This cannot be undone.`, 'Remove and save', async () => { const r = await api('PUT', '/api/sense/storage', { store: SS.store, gb: SS.gb }); SS.for = ''; toast(`Saved. ${r.removed} meetings were removed.`); fresh('snAdm', 'snSetup', 'snHome', 'snList', 'snMeet', 'snIns'); rerender(); }); };
 export function orgPage() {
   const o = get('snOrg', 'o', '/api/sense/org'); if (!o) return loading;
   return `<a class="back" href="#/app/sense/admin">${icon('arrow_back')}Admin</a><div class="page-head"><div class="grow"><h1>Reporting lines</h1><p class="sub">${o.count} people · ${esc(o.source || 'Nothing loaded')}</p></div><button class="btn ghost" data-act="sa-upload">${icon('upload_file')}Upload a new sheet</button></div>

@@ -100,7 +100,7 @@ on('GET', '/api/sense/meetings', ({ u, q }) => { need(u, 'sense'); const g = k =
     return out;
   }
   on('POST', '/api/sense/meetings/upload', ({ u, body }) => {
-    need(u, 'sense'); if (!SU.policy().upload) throw err(403, 'Your admin has switched off adding transcripts by hand.'); const title = String(body.title || '').trim().slice(0, 140), notes = !!body.notes, lines = notes ? noteLines(u, body.text) : parseLoose(String(body.text || '').slice(0, 400000)), at = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? new Date(body.date + 'T10:00:00').toISOString() : now();
+    need(u, 'sense'); if (!SU.wayOn('upload')) throw err(403, 'Your admin has switched off adding transcripts by hand.'); const title = String(body.title || '').trim().slice(0, 140), notes = !!body.notes, lines = notes ? noteLines(u, body.text) : parseLoose(String(body.text || '').slice(0, 400000)), at = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? new Date(body.date + 'T10:00:00').toISOString() : now();
     if (!title) throw err(400, 'Give the call a name.');
     if (notes && !lines.length) throw err(400, 'Type at least one line of notes.');
     if (!notes && (lines.length < 2 || new Set(lines.map(l => l.who)).size < 2)) throw err(400, "We could not tell who said what. Put each turn on its own line as 'Name: what they said'.");
@@ -149,7 +149,7 @@ on('GET', '/api/sense/meetings', ({ u, q }) => { need(u, 'sense'); const g = k =
   on('GET', '/api/sense/prep', ({ u, q }) => { need(u, 'sense'); const name = arg(q, 'account'), ms = inMine(u), any = ms.find(m => IN.account(m) === name); if (!any) throw err(404, 'You have had no call with them yet.'); const t = IN.typeOf(any); return IN.prep(ms, name, libOf(u).filter(r => r.type === t).slice(0, 5)); });
   const CONN = [['teams', 'Microsoft Teams', 'Meetings and their chat are read from here. Reminders can go as a Teams message.', true], ['outlook', 'Outlook mail', 'Summaries and the daily email are sent from here.', true], ['calendar', 'Outlook calendar', 'Shows your coming meetings, so you can get ready for a call.', true],
     ['gcal', 'Google Calendar', 'The same, for meetings kept in Google Calendar.', false], ['slack', 'Slack', 'Post minutes to a channel, and send reminders as a direct message.', false], ['zoom', 'Zoom', 'Meetings held in Zoom, with the transcript Zoom makes.', false]];
-  const SRC = { teams: 'teams', outlook: 'outlook', calendar: 'outlook', gcal: 'gcal', slack: 'slack', zoom: 'zoom' }, allowed = k => SU.policy().sources[SRC[k]] !== false; // an admin decides which of these people may connect
+  const SRC = { teams: 'teams', outlook: 'outlook', calendar: 'outlook', gcal: 'gcal', slack: 'slack', zoom: 'zoom' }, allowed = k => SU.wayOn(SRC[k]); // an admin decides which of these people may connect
   function connOf(u) { const mine = S.conn[u.id] || {}, auto = ((S.profile || {})[u.id] || { capture: 'teams' }).capture !== 'upload'; // someone who adds transcripts by hand has connected nothing yet
     return CONN.filter(c => allowed(c[0])).map(c => ({ key: c[0], name: c[1], what: c[2], on: (mine[c[0]] || {}).on !== undefined ? !!mine[c[0]].on : c[3] && auto, channel: (mine[c[0]] || {}).channel || '' })); }
   on('PUT', '/api/sense/connections/:key', ({ u, p, body }) => {

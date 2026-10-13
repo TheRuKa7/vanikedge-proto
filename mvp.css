@@ -125,3 +125,15 @@ button.tag.in-type { cursor: pointer; }
 .sc-dd i { position: absolute; left: 8px; top: 3px; font-style: normal; font-weight: 600; } .sc-dd .a { opacity: 0; animation: sc-dd-a 16s var(--d) infinite; } .sc-dd .b { animation: sc-dd-b 16s var(--d) infinite; }
 @keyframes sc-dd-a { 0%, 8% { opacity: 1; } 10%, 100% { opacity: 0; } } @keyframes sc-dd-b { 0%, 8% { opacity: 0; } 10%, 100% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .tm *, .tm *::after, .sc-dd i { animation: none !important; } }
+
+/* v23: a compact card of one-line settings, and a dropdown that holds a list */
+.setc { overflow: visible; padding-bottom: 10px; } .setc .card-head { margin-bottom: 2px; } .setc > .cap { margin: 16px 0 2px; } .setc > textarea { margin: 2px 0 8px; } .setc > .row { margin: 2px 0 8px; }
+.crow { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 5px 0; border-top: 1px solid var(--vnk-border); } .setc .card-head + .crow, .setc > .cap + .crow { border-top: 0; }
+.crow-t { flex: 0 0 168px; display: flex; align-items: center; gap: 4px; font-weight: 600; font-size: 14px; }
+.crow-v { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.dd { position: relative; } .dd summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; max-width: 300px; height: 36px; padding: 0 8px 0 12px; border: 1px solid var(--vnk-border-2); border-radius: 10px; background: var(--vnk-surface); cursor: pointer; font-size: 14px; }
+.dd summary::-webkit-details-marker { display: none; } .dd summary .mi { font-size: 18px; color: var(--vnk-ink-3); } .dd[open] summary { border-color: var(--vnk-brand); }
+.dd-list { position: absolute; right: 0; top: 40px; z-index: 30; min-width: 240px; max-height: 300px; overflow: auto; padding: 6px; border-radius: 12px; background: var(--vnk-surface); border: 1px solid var(--vnk-border-2); box-shadow: 0 10px 28px rgba(0, 0, 0, .18); display: grid; gap: 2px; }
+.dd-i { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; text-align: left; font-size: 14px; width: 100%; } .dd-i:hover { background: var(--vnk-bg); }
+.dd-i .mi { font-size: 16px; visibility: hidden; color: var(--vnk-brand); } .dd-i.on .mi { visibility: visible; } .dd-list .cap { margin: 6px 8px 2px; }
+@media (max-width: 640px) { .crow { flex-wrap: wrap; } .crow-t { flex-basis: 100%; } .crow-v { justify-content: flex-start; } .dd-list { right: auto; left: 0; } }
