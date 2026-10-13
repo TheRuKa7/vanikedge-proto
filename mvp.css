@@ -16,3 +16,30 @@ button.tag.in-type { cursor: pointer; }
 .in-bar i { height: 8px; border-radius: 4px; background: var(--vnk-border); overflow: hidden; display: block; } .in-bar b { display: block; height: 100%; background: var(--vnk-accent); }
 .in-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; }
 .in-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--vnk-border); } .in-dot.err { background: var(--vnk-err, #c0392b); } .in-dot.warn { background: var(--vnk-warn, #b7791f); } .in-dot.info { background: var(--vnk-accent); }
+
+/* Vanik Sense as its own product: first run, checklist, empty pages, home */
+.mo { display: flex; align-items: flex-start; justify-content: center; margin: 14px 0 20px; }
+.mo-n { width: 104px; display: grid; justify-items: center; gap: 8px; color: var(--vnk-ink-3); font-size: 12px; text-align: center; animation: mo-lit 4.5s infinite both; }
+.mo-n .mi { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--vnk-surface); border: 1px solid var(--vnk-border-2); font-size: 22px; }
+.mo-l { flex: 0 0 44px; height: 2px; margin-top: 26px; background: var(--vnk-border-2); position: relative; overflow: hidden; }
+.mo-l::after { content: ""; position: absolute; inset: 0; width: 45%; background: var(--vnk-brand); animation: mo-run 4.5s infinite both; }
+.mo-l:nth-of-type(2)::after { animation-delay: 1.5s; }
+@keyframes mo-lit { 0%, 28% { color: var(--vnk-ink); transform: translateY(-2px); } 33%, 100% { color: var(--vnk-ink-3); transform: none; } }
+@keyframes mo-run { 0% { transform: translateX(-110%); } 33%, 100% { transform: translateX(240%); } }
+@media (prefers-reduced-motion: reduce) { .mo-n, .mo-l::after { animation: none; } }
+.ob { min-height: 100vh; background: var(--vnk-bg); display: flex; flex-direction: column; align-items: center; padding: 0 16px 40px; }
+.ob-top { width: 100%; max-width: 720px; display: flex; align-items: center; gap: 12px; padding: 18px 0 14px; } .ob-top .brand { display: flex; align-items: center; gap: 10px; }
+.ob-bar, .ss-bar { height: 4px; border-radius: 2px; background: var(--vnk-border); overflow: hidden; } .ob-bar { width: 100%; max-width: 720px; } .ob-bar i, .ss-bar i { display: block; height: 100%; background: var(--vnk-brand); transition: width .35s ease; }
+.ob-card { width: 100%; max-width: 720px; background: var(--vnk-surface); border: 1px solid var(--vnk-border); border-radius: 20px; padding: 32px; margin-top: 28px; }
+.ob-card h1, .ob-card h2 { text-align: center; } .ob-card .sub { text-align: center; margin: 8px 0 22px; }
+.ob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; } .ob-list { display: grid; gap: 8px; }
+.ob-opt { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--vnk-border-2); background: var(--vnk-surface); cursor: pointer; min-height: 48px; }
+.ob-opt:hover { border-color: var(--vnk-ink-3); } .ob-opt small { display: block; color: var(--vnk-ink-3); font-size: 12px; margin-top: 2px; } .ob-opt .tick { visibility: hidden; color: var(--vnk-brand); }
+.ob-opt.on { border-color: var(--vnk-brand); background: var(--vnk-accent-weak); } .ob-opt.on .tick { visibility: visible; } .ob-opt[disabled] { opacity: .55; cursor: default; }
+.ob-ask { margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: var(--vnk-bg); border: 1px dashed var(--vnk-border-2); }
+.ss-check { margin-bottom: 18px; } .ss-check .ss-bar { width: 140px; } .ss-check .is-done { opacity: .55; } .ss-check .is-done .mi { color: var(--vnk-brand); }
+.ss-empty { text-align: center; padding: 28px 24px; } .ss-empty p { max-width: 520px; margin: 6px auto 0; }
+.sn-home { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 20px; align-items: start; }
+.sn-num b { font-size: 18px; } .sn-num b.bad { color: var(--vnk-err, #c0392b); } .sn-num b.warn { color: var(--vnk-warn, #b7791f); } a.sn-num, a.sn-team { text-decoration: none; color: inherit; } a.sn-team { display: block; }
+.page:has(.sn-home) { max-width: 1180px; }
+@media (max-width: 980px) { .sn-home { grid-template-columns: minmax(0, 1fr); } .ob-card { padding: 22px 18px; } }

@@ -4,7 +4,7 @@ import { $, esc, icon, info, chip, go, api, rerender, acts, ins, toast, modal, c
 import { get, P } from './suite.js';
 
 const loading = '<p class="muted">Loading…</p>';
-const IS = { type: '', kind: '', ltype: '', q: '' };
+const IS = { type: '', kind: '', ltype: '', q: '', scope: 'me' };
 const initials = n => esc(n.split(' ').map(w => w[0]).join('').slice(0, 2));
 const day = iso => new Date(iso).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 const fresh = (...s) => s.forEach(k => { P[k + 'Key'] = ''; });
@@ -35,14 +35,16 @@ acts['in-save'] = async el => { try { await api('POST', '/api/sense/library', { 
 
 // ---------- Insights: one dashboard for each kind of call
 acts['in-type'] = el => { IS.type = el.dataset.v; fresh('snIns'); rerender(); };
+acts['in-scope'] = el => { IS.scope = el.dataset.v; fresh('snIns'); rerender(); };
 export function insightsPage() {
-  const R = get('snIns', IS.type, '/api/sense/insights?type=' + encodeURIComponent(IS.type)); if (!R) return loading;
+  const R = get('snIns', IS.type + IS.scope, '/api/sense/insights?type=' + encodeURIComponent(IS.type) + '&scope=' + IS.scope); if (!R) return loading;
+  if (!R.types.length) return `<div class="card ss-empty"><h3>Insights appear after your first meeting</h3><p class="muted">Each meeting is read for what its kind of call is for: what a customer asked for, the numbers said in a review, the minutes of an update.</p><div class="row" style="justify-content:center;margin-top:14px"><a class="btn" href="#/app/sense/meetings">Go to Meetings</a></div></div>`;
   const table = t => `<div class="card" style="padding:0;overflow:auto;margin-bottom:16px"><div class="card-head" style="padding:16px 18px 0"><h3>${esc(t.title)}</h3></div>${t.rows.length ? `<table class="list"><tr>${t.cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr>${t.rows.map(r => `<tr>${r.map((c, n) => `<td class="${n ? 'small' : ''}">${n ? esc(String(c)) : `<b>${esc(String(c))}</b>`}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted" style="padding:0 18px 16px">Nothing yet.</p>'}</div>`;
   const list = l => `<div class="card"><div class="card-head"><h3>${esc(l.title)}</h3></div>${l.items.length ? l.items.map(x => `<div class="set-row"><div class="grow">${esc(x.text)}</div>${x.n ? `<span class="mono">${x.n}</span>` : ''}</div>`).join('') : '<p class="muted">Nothing yet.</p>'}</div>`;
-  return `<div class="row wrap" style="gap:8px;margin-bottom:16px"><span class="cap">Kind of call</span><button class="toggle ${IS.type ? '' : 'on'}" data-act="in-type" data-v="">All calls</button>${R.types.map(t => `<button class="toggle ${IS.type === t.type ? 'on' : ''}" data-act="in-type" data-v="${esc(t.type)}">${esc(t.type)} <span class="mono">${t.n}</span></button>`).join('')}</div>
+  return `${R.hasTeam ? `<div class="seg" style="margin-bottom:14px"><button class="${R.scope === 'me' ? 'on' : ''}" data-act="in-scope" data-v="me">My calls</button><button class="${R.scope === 'team' ? 'on' : ''}" data-act="in-scope" data-v="team">My team</button></div>` : ''}${R.limited ? `<div class="banner" style="margin-bottom:14px">${icon('info')}Your company opens only the actions of your team's meetings to you, so this shows counts and promises.</div>` : ''}<div class="row wrap" style="gap:8px;margin-bottom:16px"><span class="cap">Kind of call</span><button class="toggle ${IS.type ? '' : 'on'}" data-act="in-type" data-v="">All calls</button>${R.types.map(t => `<button class="toggle ${IS.type === t.type ? 'on' : ''}" data-act="in-type" data-v="${esc(t.type)}">${esc(t.type)} <span class="mono">${t.n}</span></button>`).join('')}</div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px">${R.cards.map(c => `<div class="card stat"><span class="small muted">${esc(c.label)}</span><b>${c.value}</b></div>`).join('')}</div>
     ${R.tables.map(table).join('')}<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">${R.lists.map(list).join('')}</div>
-    <p class="small muted" style="margin-top:14px">${icon('lock')} Built only from the calls you were in. Nobody sees a call they were not part of.</p>`;
+    <p class="small muted" style="margin-top:14px">${icon('lock')} ${R.scope === 'team' ? 'Built from the calls you were in and the calls your company opens to you as a manager.' : 'Built only from the calls you were in.'}</p>`;
 }
 
 // ---------- Library: what makes the next call better, and a brief before it
