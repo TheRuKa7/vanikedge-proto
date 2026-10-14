@@ -37,7 +37,7 @@ module.exports = function install(ctx) {
   const TOP = { idp: 'App admin', desk: 'Desk admin', echo: 'Echo admin', sense: 'Sense admin', scout: 'Scout admin', measurebook: 'MeasureBook admin' };
   const roleOf = (u, id) => { const a = S.apps[id], names = ROLES[id].map(r => r[0]); if (!a) return ''; const r = a.roles || {}, own = r['u:' + u.id], team = (u.teams || []).map(t => r['t:' + t]).find(Boolean); return names.includes(own) ? own : names.includes(team) ? team : isAdmin(u) ? TOP[id] : names[0]; };
   const cleanRoles = (id, v) => { const names = ROLES[id].map(r => r[0]), out = {}; for (const [k, r] of Object.entries(v || {})) if (/^[ut]:.{1,60}$/.test(k) && names.includes(r) && r !== names[0]) out[k] = r; return out; };
-  const ORDER = Object.keys(APPS);
+  const ORDER = Object.keys(APPS).filter(id => !ctx.MVP || id === 'sense'); // the MVP release: Vanik Sense beside VanikGPT; the other apps come later
   const def = id => { if (!APPS[id]) throw err(404, 'App not found'); return APPS[id]; };
   const usedGb = () => ORDER.reduce((a, id) => a + (S.apps[id] && S.apps[id].status === 'running' ? APPS[id].needsGb : 0), 0);
   const canUse = (u, id) => !!S.apps[id] && S.apps[id].status === 'running' && db.device.online && allowed(S.apps[id].access, u);

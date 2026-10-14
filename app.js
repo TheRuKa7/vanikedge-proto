@@ -16,10 +16,12 @@ import { workspacePage, notesPage, automationsPage, calendarPage, playgroundPage
 let accounts = null, lastHash = '', busy = false, again = false;
 const home = () => (S.boot.admin ? '#/os/home' : '#/me');
 
+// what each account shows, so a person opening a shared link knows which to pick
+const SEES = a => a.status === 'invited' ? 'A first visit: the welcome steps, then an empty start' : a.role === 'owner' ? 'Everything: the Vanik Edge console, VanikGPT and Vanik Sense' : a.role === 'admin' ? 'Runs the console and the apps' : 'A member of staff using VanikGPT and Vanik Sense';
 function signinPage() {
   return `<div class="center-page"><div class="card"><div class="brand" style="padding:0 0 18px">${LOGO}<span class="vk-brand"><small>Vanik Edge</small><b>Sign in</b></span></div>
-    <h2>Sign in</h2><p class="muted" style="margin:6px 0 18px">Pick an account. On your appliance this is your company single sign-on.</p>
-    <div class="stack" style="gap:8px">${accounts.map(a => `<button class="acct" data-act="signin" data-id="${a.id}"><span class="avatar">${esc(initials(a.name))}</span><span class="grow"><b>${esc(a.name)}</b><br><span class="small muted">${esc(a.email)}</span></span>${a.status === 'invited' ? chip('Invited', 'warn') : ''}${chip(ROLE[a.role], 'line', false)}</button>`).join('')}</div></div></div>`;
+    <h2>Sign in</h2><p class="muted" style="margin:6px 0 18px">Pick an account to see Vanik Edge as that person. On your appliance this is your company single sign-on.</p>
+    <div class="stack" style="gap:8px">${accounts.map(a => `<button class="acct" data-act="signin" data-id="${a.id}"><span class="avatar">${esc(initials(a.name))}</span><span class="grow"><b>${esc(a.name)}</b><br><span class="small muted">${esc(SEES(a))}</span></span>${a.status === 'invited' ? chip('Invited', 'warn') : ''}${chip(ROLE[a.role], 'line', false)}</button>`).join('')}</div></div></div>`;
 }
 acts.signin = async el => {
   await api('POST', '/api/signin', { userId: el.dataset.id });

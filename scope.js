@@ -9,6 +9,8 @@ const OUT = [
   /^#\/me\/keys/,
   // Vanik Sense: the readings for each kind of call and the Library come in a later release
   /^#\/app\/sense\/(insights|library)(\/|$)/,
+  // the other apps come after the MVP: Document Processing, Desk, Echo, Scout, MeasureBook
+  /^#\/(app|os\/apps)\/(idp|desk|echo|scout|measurebook)(\/|$)/,
 ];
 // Built, and kept for a later release: hidden in the MVP. Each one is checked where its control is drawn.
 const LATER = ['web-search', 'connectors', 'images', 'video', 'personal-storage', 'air-gapped', 'add-store', // VanikGPT and the console
