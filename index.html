@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="vanik-ui.css">
   <link rel="stylesheet" href="mvp.css">
-</head>
+<link rel="modulepreload" href="app_admin.js"><link rel="modulepreload" href="core.js"><link rel="modulepreload" href="edge.js"><link rel="modulepreload" href="flows.js"><link rel="modulepreload" href="gpt.js"><link rel="modulepreload" href="gpt_setup.js"><link rel="modulepreload" href="guide.js"><link rel="modulepreload" href="hints.js"><link rel="modulepreload" href="insight.js"><link rel="modulepreload" href="more.js"><link rel="modulepreload" href="os.js"><link rel="modulepreload" href="parity.js"><link rel="modulepreload" href="plane.js"><link rel="modulepreload" href="platform.js"><link rel="modulepreload" href="real.js"><link rel="modulepreload" href="scope.js"><link rel="modulepreload" href="sense.js"><link rel="modulepreload" href="sense_setup.js"><link rel="modulepreload" href="simple.js"><link rel="modulepreload" href="suite.js"><link rel="modulepreload" href="vanik-ui.js"><link rel="modulepreload" href="work.js"></head>
 <body>
   <div id="root"><p class="boot" style="font:14px/1.5 system-ui,sans-serif;color:#6b7280;text-align:center;margin-top:28vh">Opening Vanik Edge…</p></div>
   <script src="vanik-ui.js"></script>
@@ -23,7 +23,7 @@
       if (!('serviceWorker' in navigator)) { document.getElementById('root').textContent = 'This preview needs a browser with service workers.'; return; }
       const say = t => { const b = document.querySelector('#root .boot'); if (b) b.textContent = t; };
       say('Starting the preview. The first time takes a few seconds.');
-      const BUILD = '20261014103017', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
+      const BUILD = '20261014110149', changed = () => new Promise(r => { navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }); setTimeout(r, 8000); });
       const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
       await navigator.serviceWorker.ready;
       if (!navigator.serviceWorker.controller) await changed();

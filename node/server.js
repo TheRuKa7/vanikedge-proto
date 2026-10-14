@@ -31,7 +31,7 @@ const defaultConfig = () => ({
   safety: { pii: MVP ? 'off' : 'mask', retentionDays: 0, uploads: true, blockedTopics: [], maskDocuments: false, dailyLimit: 0, voice: false, adminChats: false },
   tools: { enabled: ['calculator', 'gst', 'tables', 'browser', 'screen'], browserMode: 'allowed', sites: [], signins: [] },
   advanced: { port: 9016, offline: true, telemetry: false, corsOrigin: '' },
-  followHub: MVP, link: { mode: 'gateway', url: '', model: '', keySet: false }, web: { on: false, credits: 200 },
+  followHub: MVP, modelPick: 'all', link: { mode: 'gateway', url: '', model: '', keySet: false }, web: { on: false, credits: 200 },
   admin: { users: [], advanced: false }, storage: { store: 'st_db', kind: 'db', gb: 20 }, features: { connectors: false, images: false, video: false }, data: { personal: true, quotaMb: 500, tempChats: false },
 });
 const freshApp = () => ({ status: 'not_installed', port: 9016, image: 'vanik-gpt:v0.11.4-vanik.2', needsGb: 1.6, installedAt: null, installedBy: null, config: defaultConfig(), versions: [], deployedVersion: null, deploys: [] });
@@ -69,7 +69,7 @@ const RL = { sample() {} };
 const SN = { sample() {}, fromTranscript: () => '' };
 const SU = { usedGb: () => 0, boot: () => null, sample() {}, canUse: () => false, apps: () => [] };
 const AA = { cleanAdmin: a => a, cleanStore: s => s, cleanFeatures: f => f, cleanData: d => d, boot: () => null, wipe: () => null, quota() {} };
-const GS = { follow() {}, follows: () => false, custom: () => false, published: () => true, usable: () => true, teams: () => [], boot: () => null, search: () => null };
+const GS = { follow() {}, picked: () => [], cleanPick: p => p, follows: () => false, custom: () => false, published: () => true, usable: () => true, teams: () => [], boot: () => null, search: () => null };
 const ED = { outsideOn: () => [], isOutside: () => false, callLimit: () => 10, sendsDocs: () => false, askOutside: async () => {} };
 const SYSTEM = { id: 'system', name: 'Vanik OS', role: 'owner', teams: [] };
 const FX = { emit() {}, issueKey() {}, revokeSystemKeys() {}, pendingApprovals: () => 0, failedDeliveries: () => 0 };
@@ -363,13 +363,14 @@ function bootstrap(u) {
   };
 }
 function usage() {
-  const days = [...Array(7)].map((_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5); return { day: d.toISOString().slice(0, 10), questions: 0, tokens: 0 }; });
+  const days = [...Array(14)].map((_, i) => { const d = new Date(Date.now() - (13 - i) * 864e5); return { day: d.toISOString().slice(0, 10), questions: 0, tokens: 0, people: new Set() }; });
+  const hours = Array(24).fill(0), times = []; let sourced = 0;
   const byDay = Object.fromEntries(days.map(d => [d.day, d])), per = {}, modes = { model: 0, documents: 0, unavailable: 0, blocked: 0, tool: 0 }, cited = {};
   let q = 0, tokens = 0, ms = 0, answers = 0, up = 0, down = 0;
   for (const c of db.chats) for (const m of c.messages) {
     const day = byDay[m.at.slice(0, 10)];
-    if (m.role === 'user') { q++; if (day) day.questions++; const p = per[c.userId] || (per[c.userId] = { questions: 0, last: m.at }); p.questions++; if (m.at > p.last) p.last = m.at; continue; }
-    answers++; ms += m.ms || 0; const t = (m.tokensIn || 0) + (m.tokensOut || 0); tokens += t; if (day) day.tokens += t;
+    if (m.role === 'user') { q++; hours[new Date(m.at).getHours()]++; if (day) { day.questions++; day.people.add(c.userId); } const p = per[c.userId] || (per[c.userId] = { questions: 0, last: m.at }); p.questions++; if (m.at > p.last) p.last = m.at; continue; }
+    answers++; ms += m.ms || 0; if (m.ms) times.push(m.ms); if ((m.citations || []).length) sourced++; const t = (m.tokensIn || 0) + (m.tokensOut || 0); tokens += t; if (day) day.tokens += t;
     modes[m.mode] = (modes[m.mode] || 0) + 1;
     if (m.feedback === 'up') up++; if (m.feedback === 'down') down++;
     const used = new Set([...m.content.matchAll(/\[(\d{1,2})\]/g)].map(x => +x[1]));
@@ -378,7 +379,10 @@ function usage() {
   const reasons = {};
   db.feedback.forEach(f => { reasons[f.reason] = (reasons[f.reason] || 0) + 1; });
   return {
-    days, questions: q, tokens, avgMs: answers ? Math.round(ms / answers) : 0, activeUsers: Object.keys(per).length, chats: db.chats.length, modes, up, down, reasons,
+    days: days.slice(7).map(d => ({ ...d, people: d.people.size })), prev: days.slice(0, 7).reduce((n, d) => n + d.questions, 0), week: days.slice(7).reduce((n, d) => n + d.questions, 0), days14: days.map(d => ({ day: d.day, questions: d.questions, people: d.people.size })),
+    activeWeek: new Set(days.slice(7).flatMap(d => [...d.people])).size, hours, answers, sourced, p90Ms: times.length ? times.sort((x, y) => x - y)[Math.floor(times.length * 0.9) - (times.length > 1 ? 0 : 0)] || times[times.length - 1] : 0,
+    canUse: db.users.filter(x => allowed(db.app.config.access, x)).length,
+    questions: q, tokens, avgMs: answers ? Math.round(ms / answers) : 0, activeUsers: Object.keys(per).length, chats: db.chats.length, modes, up, down, reasons,
     notes: db.feedback.filter(f => f.note).slice(0, 20).map(f => ({ at: f.at, reason: f.reason, note: f.note, userName: f.userName })),
     people: Object.entries(per).map(([id, p]) => ({ name: (db.users.find(x => x.id === id) || { name: 'Removed user' }).name, ...p })).sort((a, b) => b.questions - a.questions),
     collections: Object.entries(cited).map(([id, n]) => ({ name: id.startsWith('chat:') ? 'Files attached in chats' : (db.collections.find(c => c.id === id) || { name: 'Deleted collection' }).name, n })).sort((a, b) => b.n - a.n),
@@ -569,7 +573,8 @@ on('PUT', '/api/app/config', ({ u, body }) => {
   if (a.status === 'not_installed') throw err(400, 'Install VanikGPT first.');
   const link = GS.cleanLink(c.link, a.config.link), followHub = c.followHub === undefined ? GS.follows() : !!c.followHub, web = GS.cleanWeb(c.web || a.config.web);
   // a custom endpoint has the one model it names; else, when models follow Model Hub, every serving chat model is offered and none is picked here
-  const models = link.mode === 'custom' ? [link.model] : followHub ? GS.served() : (c.models || []).filter(id => db.models.some(m => m.id === id && m.kind === 'chat'));
+  const modelPick = GS.cleanPick(c.modelPick === undefined ? a.config.modelPick : c.modelPick);
+  const models = link.mode === 'custom' ? [link.model] : followHub ? GS.picked(modelPick) : (c.models || []).filter(id => db.models.some(m => m.id === id && m.kind === 'chat'));
   const cfg = {
     models, defaultModel: models.includes(c.defaultModel) ? c.defaultModel : (models[0] || null), instructions: String(c.instructions || '').trim().slice(0, 4000),
     collections: c.collections === 'all' || !Array.isArray(c.collections) ? 'all' : c.collections.filter(id => db.collections.some(x => x.id === id)),
@@ -579,7 +584,7 @@ on('PUT', '/api/app/config', ({ u, body }) => {
     tools: !c.tools ? d.tools : { enabled: (c.tools.enabled || []).filter(x => ['calculator', 'gst', 'tables', 'browser', 'screen'].includes(x)), browserMode: c.tools.browserMode === 'any' ? 'any' : 'allowed', sites: [...new Set((c.tools.sites || []).map(x => String(x).toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0]).filter(x => /^[a-z0-9.-]+$/.test(x)))].slice(0, 100),
       signins: (c.tools.signins || []).map(x => ({ host: String(x.host || '').toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0], kind: x.kind === 'sso' ? 'sso' : 'vault', account: String(x.account || '').trim().slice(0, 80) })).filter(x => /^[a-z0-9.-]+$/.test(x.host)).slice(0, 50) },
     advanced: { port: Math.max(1024, Math.min(65535, +(c.advanced && c.advanced.port) || 9016)), offline: !web.on && !(c.advanced && c.advanced.offline === false), telemetry: !!(c.advanced && c.advanced.telemetry), corsOrigin: String((c.advanced && c.advanced.corsOrigin) || '').trim() },
-    followHub, link, web, admin: AA.cleanAdmin(c.admin || a.config.admin), storage: AA.cleanStore(c.storage || a.config.storage), features: AA.cleanFeatures(c.features || a.config.features), data: AA.cleanData(c.data || a.config.data),
+    followHub, modelPick, link, web, admin: AA.cleanAdmin(c.admin || a.config.admin), storage: AA.cleanStore(c.storage || a.config.storage), features: AA.cleanFeatures(c.features || a.config.features), data: AA.cleanData(c.data || a.config.data),
   };
   if (cfg.advanced.offline) cfg.features.connectors = false; // air-gapped: nothing that needs the internet
   if (a.versions[0] && JSON.stringify(a.versions[0].config) === JSON.stringify(cfg)) return { v: a.versions[0].v, unchanged: true };
@@ -874,7 +879,8 @@ Object.assign(SU, require('./suite')({ MVP, db, on, err, uid, now, audit, isAdmi
 Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id), toSense: (...a) => SN.fromTranscript(...a) }));
 Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, MVP, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
 Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
-Object.assign(AA, require('./app_admin')({ db, on, err, audit, isAdmin, needGpt, A, uid, now, call: (...a) => call(...a) }));
+Object.assign(AA, require('./app_admin')({ db, on, err, audit, isAdmin, needGpt, A, uid, now, allowed, call: (...a) => call(...a) }));
+Object.defineProperty(db, '__stores', { value: () => AA.stores(), enumerable: false }); // Sense reads the console's data stores with their sizes
 Object.assign(GS, require('./gpt_setup')({ db, on, err, now, audit, A, byId, MVP, save, needGpt, suiteApps: () => SU.apps() }));
 Object.assign(ED, require('./edge')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt, save, probes, issueKey: (...a) => FX.issueKey(...a) }));
 

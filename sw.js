@@ -2,7 +2,7 @@
 // The server files are loaded as text and given small stand-ins for http, fs, crypto, path, os and child_process.
 // State is kept in this browser (IndexedDB). Nothing is sent anywhere.
 const BASE = new URL('./', self.location).pathname.replace(/\/$/, '');
-const BUILD = '20261014103017'; // set by build_demo.mjs; the page carries the same mark
+const BUILD = '20261014110149'; // set by build_demo.mjs; the page carries the same mark
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 // ---- storage: one JSON document
@@ -45,10 +45,15 @@ const clear = fn => t => fn(t && t.id !== undefined ? t.id : t);
 const mods = { http: http_, fs: fs_, path: path_, crypto: crypto_, os: { tmpdir: () => '/tmp' }, child_process: { spawn() { throw new Error('no processes here'); } } };
 const BufferLike = { concat: parts => ({ toString: () => dec.decode(new Uint8Array(parts.flatMap(p => [...p]))) }) };
 const cache = {};
+const CACHE = 'vk-' + BUILD; // one cache per build: files are fetched once, then served from here until the next build
+const cached = async url => { const c = await caches.open(CACHE), hit = await c.match(url); if (hit) return hit; const r = await fetch(url, { cache: 'no-cache' }); if (r.ok) c.put(url, r.clone()); return r; };
+// The sample workspace is made at build time. Every date in it moves forward by the time since then, so it stays current.
+const shift = (text, ms) => { const days = Math.round(ms / 864e5); return text.replace(/"(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)?"/g, (m, d, t) => { const x = new Date(d + (t || 'T00:00:00Z')); if (isNaN(x)) return m; return '"' + (t ? new Date(x.getTime() + ms).toISOString() : new Date(x.getTime() + days * 864e5).toISOString().slice(0, 10)) + '"'; }); };
 async function boot() {
   dbText = (await kvGet(DBKEY)) ?? null;
+  if (dbText === null) { try { const s = await (await cached(`${BASE}/node/seed.json`)).json(); dbText = shift(s.db, Date.now() - s.at); kvSet(DBKEY, dbText); } catch { dbText = null; /* no seed: the server makes the sample itself */ } }
   const src = {}, names = ['server', 'features', 'agent', 'sample', 'work', 'more', 'parity', 'edge', 'suite', 'real', 'sense', 'sense_insight', 'sense_notes', 'sense_setup', 'gpt_setup', 'app_admin', 'plane'];
-  (await Promise.all(names.map(f => fetch(`${BASE}/node/${f}.js`, { cache: 'no-cache' }).then(r => r.text())))).forEach((t, i) => { src[names[i]] = t; }); // all at once: the start is several seconds shorter
+  (await Promise.all(names.map(f => cached(`${BASE}/node/${f}.js`).then(r => r.text())))).forEach((t, i) => { src[names[i]] = t; }); // all at once: the start is several seconds shorter
   const req = name => { if (mods[name]) return mods[name]; const f = name.replace('./', ''); if (!cache[f]) { const module = { exports: {} }; cache[f] = module; run(src[f], module); } return cache[f].exports; };
   const run = (code, module) => new Function('require', 'module', 'exports', 'process', '__dirname', 'Buffer', 'setInterval', 'setTimeout', 'clearTimeout', 'clearInterval', 'console', code)(req, module, module.exports, { env: { VANIK_DEMO: '1' }, argv: [], on() {}, execPath: '' }, '/app', BufferLike, timer(setInterval), timer(setTimeout), clear(clearTimeout), clear(clearInterval), { log() {}, error: (...a) => console.error(...a) });
   run(src.server, { exports: {} });
@@ -71,12 +76,15 @@ async function serve(request, pathname, search) {
   });
 }
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', e => e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k); await self.clients.claim(); })())); // older builds' files go
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (u.origin !== self.location.origin || !u.pathname.startsWith(BASE + '/')) return;
   const p = u.pathname.slice(BASE.length);
   if (p === '/__build') return e.respondWith(new Response(BUILD, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } })); // the page asks which build is in charge
-  if (e.request.method === 'GET' && !p.startsWith('/api/') && !p.startsWith('/gateway/')) return e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).catch(() => fetch(e.request))); // pages and scripts are checked against the site every time, so nobody runs a mix of old and new
+  if (e.request.method === 'GET' && !p.startsWith('/api/') && !p.startsWith('/gateway/')) { // the page itself is asked of the site each time, so a new build is seen; its files come from this build's cache
+    if (e.request.mode === 'navigate' || p === '/' || p.endsWith('.html')) return e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).catch(() => caches.match(e.request.url)));
+    return e.respondWith(cached(e.request.url).catch(() => fetch(e.request)));
+  }
   if (p.startsWith('/api/') || p.startsWith('/gateway/')) e.respondWith(serve(e.request, p, u.search).catch(err => new Response(JSON.stringify({ error: 'The preview could not start: ' + err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } })));
 });

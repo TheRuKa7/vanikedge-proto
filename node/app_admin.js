@@ -6,7 +6,7 @@
 //     a site can have several appliances and its own storage. An app's Setup only picks one from that list and sets the space.
 //     A new store or a new size starts empty.
 // Rules are written out in prds/PRD-APP-ADMIN-AND-GUIDES.md. Client side: public/app_admin.js. Vanik Sense has the same idea in sense_setup.js.
-module.exports = function install({ db, on, err, audit, isAdmin, needGpt, call, A, uid, now }) {
+module.exports = function install({ db, on, err, audit, isAdmin, needGpt, call, A, uid, now, allowed }) {
   const ADMIN0 = { users: [], advanced: false }, STORE0 = { store: 'st_db', kind: 'db', gb: 20 };
   const FEAT0 = { connectors: false, images: false, video: false }, DATA0 = { personal: true, quotaMb: 500, tempChats: false };
   const cfg = () => db.app.config, adminOf = () => ({ ...ADMIN0, ...(cfg().admin || {}) });
@@ -15,7 +15,13 @@ module.exports = function install({ db, on, err, audit, isAdmin, needGpt, call, 
   const KINDS = { postgres: 'PostgreSQL database', s3: 'S3 bucket', disk: 'Disk', nfs: 'Network share' };
   const stores = () => { if (!db.stores) db.stores = [{ id: 'st_db', name: 'Appliance database', kind: 'postgres', where: db.device.name, builtin: true, at: now() }, { id: 'st_disk', name: 'Appliance disk', kind: 'disk', where: db.device.name, builtin: true, at: now() }]; return db.stores; };
   const usedBy = id => [cfg() && db.app.status !== 'not_installed' && cleanStore(cfg().storage).store === id && 'VanikGPT', db.sense && db.sense.policy && db.sense.policy.storage && (db.sense.policy.storage.store || 'st_db') === id && 'Vanik Sense'].filter(Boolean);
-  const storeView = s => ({ ...s, kindName: KINDS[s.kind], usedBy: usedBy(s.id) });
+  // the appliance reports the size of its own stores; a store added by hand reports none until it is connected
+  // sizes come from the appliance's own disk (the console Home shows the same total): a database partition, the rest for files and models
+  const DBGB = 600, sysUse = () => 29 + (db.models || []).filter(m => m.status !== 'available').reduce((a, m) => a + m.memGb * 0.6, 0);
+  const SIZE0 = () => { const total = Math.round(((db.device && db.device.diskTb) || 3.6) * 1000); return { st_db: { capacityGb: DBGB, systemGb: 12, what: 'PostgreSQL in its own partition of the appliance disk. Searchable, and backed up with the appliance. Best for chats and meetings.' }, st_disk: { capacityGb: total - DBGB, systemGb: Math.round(sysUse()), what: 'Files on the rest of the appliance disk, next to Vanik OS and the models. Larger, simple to copy out. Best for big files and exports.' } }; };
+  const setAside = id => (cfg() && db.app.status !== 'not_installed' && cleanStore(cfg().storage).store === id ? cleanStore(cfg().storage).gb : 0) + (db.sense && db.sense.policy && db.sense.policy.storage && (db.sense.policy.storage.store || (db.sense.policy.storage.kind === 'local' ? 'st_disk' : 'st_db')) === id ? +db.sense.policy.storage.gb || 0 : 0);
+  const sizes = s => { const z = SIZE0()[s.id]; if (!z) return { capacityGb: null, systemGb: null, setAsideGb: setAside(s.id), freeGb: null, what: '' }; const set = setAside(s.id); return { ...z, setAsideGb: set, freeGb: z.capacityGb - z.systemGb - set }; };
+  const storeView = s => ({ ...s, kindName: KINDS[s.kind], usedBy: usedBy(s.id), ...sizes(s) });
   on('GET', '/api/stores', () => ({ stores: stores().map(storeView), kinds: Object.entries(KINDS) }), A);
   on('POST', '/api/stores', ({ u, body }) => {
     const name = String(body.name || '').trim().slice(0, 60), kind = KINDS[body.kind] ? body.kind : '', where = String(body.where || '').trim().slice(0, 120);
@@ -84,13 +90,13 @@ module.exports = function install({ db, on, err, audit, isAdmin, needGpt, call, 
     const c = cfg(), adv = isAdmin(u) || adminOf().advanced, b = body || {}, safety = { ...c.safety };
     [...SAFE, ...(adv ? ADV : [])].forEach(k => { if (b.safety && b.safety[k] !== undefined) safety[k] = b.safety[k]; });
     // without the advanced settings, anything sent for them is left as it was
-    const next = { ...c, link: b.link || c.link, web: b.web ? { ...c.web, ...b.web } : c.web, features: b.features ? { ...c.features, ...b.features } : c.features, data: b.data ? { ...c.data, ...b.data } : c.data,
+    const next = { ...c, web: b.web ? { ...c.web, ...b.web } : c.web, features: b.features ? { ...c.features, ...b.features } : c.features, data: b.data ? { ...c.data, ...b.data } : c.data,
       instructions: b.instructions !== undefined ? b.instructions : c.instructions, safety, advanced: adv && b.advanced && b.advanced.offline !== undefined ? { ...c.advanced, offline: !!b.advanced.offline } : c.advanced };
     const r = await call(u, 'PUT', '/api/app/config', { config: next, note: 'Changed inside VanikGPT' });
     if (!r.unchanged && db.app.status === 'running') db.app.deployedVersion = r.v; // these take effect at once; nothing is redeployed
     return r;
   });
   const boot = u => ({ managed: managed(), can: managed() && (isAdmin(u) || isAppAdmin(u)), advanced: isAdmin(u) || adminOf().advanced, names: adminOf().users.map(id => (db.users.find(x => x.id === id) || {}).name).filter(Boolean),
-    storage: { ...storeOf(), name: storeName(storeOf().store), ...used() }, stores: isAdmin(u) ? stores().map(s => ({ id: s.id, name: s.name, kindName: KINDS[s.kind], where: s.where })) : undefined, mineMb: Math.round(mine(u).reduce((n, d) => n + (d.size || 0), 0) / 10485.76) / 100 });
-  return { ADMIN0, STORE0, FEAT0, DATA0, cleanAdmin, cleanStore, cleanFeatures, cleanData, storeOf, storeName, stores, wipe, quota, boot, isAppAdmin };
+    storage: { ...storeOf(), name: storeName(storeOf().store), ...used() }, stores: isAdmin(u) ? stores().map(storeView) : undefined, people: db.users.filter(x => allowed(cfg().access, x)).length, mineMb: Math.round(mine(u).reduce((n, d) => n + (d.size || 0), 0) / 10485.76) / 100 });
+  return { storeView, ADMIN0, STORE0, FEAT0, DATA0, cleanAdmin, cleanStore, cleanFeatures, cleanData, storeOf, storeName, stores: () => stores().map(storeView), wipe, quota, boot, isAppAdmin };
 };

@@ -1,6 +1,6 @@
 // Vanik OS console pages that VanikGPT touches: Apps, the VanikGPT manage page, Knowledge base, Model Hub, People, Settings.
 import { hint } from './hints.js';
-import { ADMIN0, STORE0, FEAT0, DATA0, crow, sw, runByDd, accessDd, storageRow, storesBody } from './app_admin.js';
+import { ADMIN0, STORE0, FEAT0, DATA0, crow, sw, dd, runByDd, accessDd, storageRow, storesBody } from './app_admin.js';
 import { LINK0, WEB0, bindSetup, embedCard, stateChip, publishBar, appsCard, appNames, usedBy, teamsCard } from './gpt_setup.js';
 import { inScope, later } from './scope.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
@@ -86,7 +86,7 @@ acts['app-menu'] = el => {
 
 // ---------- VanikGPT manage page
 let draft = null, draftBase = '', advOpen = false, allModels = false, actTab = 'versions', pollT = null;
-function ensureDraft() { const cfg = S.boot.app.config, base = JSON.stringify({ ...cfg, link: cfg.link || LINK0, web: cfg.web || WEB0, admin: cfg.admin || ADMIN0, storage: { ...STORE0, ...(cfg.storage || {}) }, features: cfg.features || FEAT0, data: cfg.data || DATA0, access: { ...cfg.access, deny: (cfg.access || {}).deny || [] } }); /* the picker adds an empty block list; without it here the page opens as 'unsaved' */ if (!draft || draftBase !== base) { draft = JSON.parse(base); draftBase = base; } accessDrafts.app = draft.access; accessChanged.app = saveBar; bindSetup(draft, saveBar); }
+function ensureDraft() { const cfg = S.boot.app.config, base = JSON.stringify({ ...cfg, link: cfg.link || LINK0, web: cfg.web || WEB0, modelPick: cfg.modelPick === undefined ? 'all' : cfg.modelPick, admin: cfg.admin || ADMIN0, storage: { ...STORE0, ...(cfg.storage || {}) }, features: cfg.features || FEAT0, data: cfg.data || DATA0, access: { ...cfg.access, deny: (cfg.access || {}).deny || [] } }); /* the picker adds an empty block list; without it here the page opens as 'unsaved' */ if (!draft || draftBase !== base) { draft = JSON.parse(base); draftBase = base; } accessDrafts.app = draft.access; accessChanged.app = saveBar; bindSetup(draft, saveBar); }
 const dirty = () => !!draft && JSON.stringify(draft) !== draftBase;
 
 function deployBox() {
@@ -112,29 +112,29 @@ export function watchDeploy() {
 acts.deploy = async () => { await api('POST', '/api/app/deploy'); await refresh(); watchDeploy(); };
 acts['deploy-cancel'] = async () => { await api('POST', '/api/app/deploy/cancel'); await refresh(); };
 
-function healthRows() {
-  const B = S.boot, a = B.app, c = a.config, st = appStatus();
-  const chosen = c.models.map(id => B.models.find(m => m.id === id)).filter(Boolean), serving = chosen.filter(m => m.status === 'serving');
-  const cols = B.collections.filter(x => c.collections === 'all' || c.collections.includes(x.id)), docs = cols.reduce((n, x) => n + x.docCount, 0);
-  const users = B.users.filter(u => u.role !== 'user' || c.access.mode === 'everyone' || c.access.users.includes(u.id) || (u.teams || []).some(t => c.access.teams.includes(t))).length;
-  const row = (ok, label, detail, action = '') => `<div class="set-row"><span class="material-icons mi" style="color:var(--vnk-${ok === true ? 'ok' : ok === false ? 'warn' : 'ink-3'})">${ok === true ? 'check_circle' : ok === false ? 'error_outline' : 'radio_button_unchecked'}</span><div class="grow"><div class="lbl">${label}</div><div class="small muted">${detail}</div></div>${action}</div>`;
-  const lastOk = (a.deploys || []).find(d => d.result === 'ok');
-  return row(a.status === 'running' && B.device.online, 'App', a.status === 'running' ? (B.device.online ? `Running on ${esc(B.device.name)}, port ${a.port}${lastOk ? ' · live since ' + ago(lastOk.endedAt) : ''}` : 'The appliance is offline, so nobody can reach VanikGPT.') : a.status === 'deploying' ? 'Deploying now.' : a.status === 'stopped' ? 'Stopped. People cannot chat.' : 'Not deployed yet.', chip(st[0], st[1]))
-    + row(serving.length > 0, 'Model', !chosen.length ? 'No model chosen yet.' : serving.length ? `Serving: ${serving.map(m => esc(m.id)).join(', ')}` : 'None of the chosen models is serving.', !chosen.length ? `<a class="btn ghost" href="#/os/apps/vanikgpt/setup">Choose</a>` : serving.length ? '' : `<a class="btn ghost" href="#/os/models">Model Hub</a>`)
-    + row(B.gateway.ok, `Model gateway ${info('VanikGPT reaches models through the Vanik API gateway. The key is created and rotated for you.')}`, B.gateway.ok ? 'Reachable.' : 'Not reachable. Until it is, answers are built from your documents only.', `<button class="btn ghost" data-act="gw-check">Check again</button>`)
-    + row(docs > 0 ? true : null, 'Knowledge', docs ? `${cols.length} ${cols.length === 1 ? 'collection' : 'collections'} · ${docs} ${docs === 1 ? 'document' : 'documents'} can be searched.` : 'No documents yet. Answers will not cite your files.', `<a class="btn ghost" href="#/os/knowledge">Knowledge base</a>`)
-    + row(true, 'People', `${accessLabel(c.access)} · ${users} of ${B.users.length} can open it.`, `<a class="btn ghost" href="#/os/people">People</a>`)
-    + row(c.safety.pii !== 'off', 'Personal data', { mask: 'Aadhaar, PAN, GSTIN, IFSC, phone and email are masked before a question reaches the model.', flag: 'Questions with personal data are flagged but sent as typed.', off: 'Questions are not checked for personal data.' }[c.safety.pii]);
+// ---------- Overview: the key facts, health as icons with an info tag each, and graphs
+const stat = (k, v, tip, sub = '') => `<div class="card flat stat"><span class="k">${k}${tip ? info(tip) : ''}</span><b>${v}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</div>`;
+const dayLabel = d => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+// one measure, one colour: a bar for each day or hour, its value on hover and the largest one labelled
+const barChart = (pts, unit) => { const max = Math.max(1, ...pts.map(p => p.v)), top = pts.reduce((x, p) => (p.v > x.v ? p : x), pts[0]);
+  return `<div class="bars vk-bars">${pts.map(p => `<div data-tip="${esc(p.tip || p.label)}: ${p.v} ${unit}"><span class="mono">${p === top && p.v ? p.v : ''}</span><i style="height:${Math.max(p.v ? 4 : 1, Math.round(100 * p.v / max))}%"></i><span class="mono">${esc(p.label)}</span></div>`).join('')}</div>`; };
+function healthTiles() {
+  const B = S.boot, a = B.app, c = a.config, g = B.gptAdmin || { storage: {}, names: [] }, custom = c.link && c.link.mode === 'custom';
+  const offered = c.models.map(id => B.models.find(m => m.id === id)).filter(Boolean), serving = offered.filter(m => m.status === 'serving');
+  const kbs = B.collections.filter(x => x.state !== 'draft' && (!x.apps || x.apps === 'all' || x.apps.includes('vanikgpt'))), docs = kbs.reduce((n, x) => n + x.docCount, 0);
+  const st = g.storage || {}, gb = st.gb || 20, pct = Math.round(100 * (st.bytes || 0) / (gb * 1073741824));
+  const T = [
+    ['App', 'apps', a.status === 'running' && B.device.online, a.status === 'running' ? (B.device.online ? `Running on ${B.device.name}, port ${a.port}.` : 'The appliance is offline, so nobody can reach VanikGPT.') : a.status === 'deploying' ? 'Deploying now.' : a.status === 'stopped' ? 'Stopped. People cannot chat.' : 'Not deployed yet.'],
+    ['Model', 'memory', custom ? null : serving.length > 0, custom ? `Custom endpoint: ${c.link.model}. Not checked by the console.` : serving.length ? `${serving.length} ${serving.length === 1 ? 'model is' : 'models are'} offered: ${serving.map(m => m.id).join(', ')}. Default: ${c.defaultModel}.` : 'None of the offered models is serving. Serve one in Model Hub.'],
+    ['Gateway', 'hub', custom ? null : B.gateway.ok, custom ? 'Not used: VanikGPT calls a custom endpoint.' : B.gateway.ok ? 'The Vanik API gateway is reachable. Its key is made and changed for you.' : 'The gateway is not reachable. Until it is, answers are built from documents only.'],
+    ['Knowledge', 'library_books', docs > 0 ? true : null, docs ? `${kbs.length} ${kbs.length === 1 ? 'knowledge base' : 'knowledge bases'}, ${docs} ${docs === 1 ? 'document' : 'documents'}, open to VanikGPT.` : 'No published knowledge base is open to VanikGPT yet.'],
+    ['Access', 'group', true, `${accessLabel(c.access)}. ${g.people || 0} ${g.people === 1 ? 'person' : 'people'} can use VanikGPT. Run by ${g.names.length ? g.names.join(', ') : 'the console admins'}.`],
+    ['Storage', 'storage', pct < 90, `${bytes(st.bytes || 0)} of ${gb} GB used (${pct}%) on ${st.name || 'the appliance database'}: ${st.chats || 0} chats and ${st.files || 0} files.`],
+  ];
+  const mark = ok => ok === true ? ['ok', 'check_circle', 'Healthy'] : ok === false ? ['warn', 'error', 'Needs attention'] : ['idle', 'remove_circle_outline', 'Not set up'];
+  return `<div class="hl">${T.map(([label, ic, ok, detail]) => { const [cls, sic, word] = mark(ok); return `<div class="hl-t ${cls}"><div class="row"><span class="material-icons mi hl-i">${ic}</span><span class="material-icons mi hl-s" aria-hidden="true">${sic}</span></div><b>${label}${info(detail)}</b><small>${word}</small></div>`; }).join('')}</div>`;
 }
 acts['gw-check'] = async el => { el.disabled = true; const r = await api('POST', '/api/app/check'); await refresh(); toast(r.ok ? 'Model gateway is reachable.' : 'Model gateway is still not reachable.', r.ok ? '' : 'err'); };
-
-const stat = (k, v, tip) => `<div class="card flat stat"><span class="k">${k}${tip ? info(tip) : ''}</span><b>${v}</b></div>`;
-function tabOverview() {
-  const a = S.boot.app, u = cache.usage, wk = u ? u.days.reduce((n, d) => n + d.questions, 0) : '—';
-  return `<div class="grid four" style="margin-bottom:20px">${stat('Questions, 7 days', wk)}${stat('People asking', u ? u.activeUsers : '—')}${stat('Average answer time', u ? (u.avgMs ? (u.avgMs / 1000).toFixed(1) + ' s' : '—') : '—')}${stat('Helpful answers', u ? (u.up + u.down ? Math.round(100 * u.up / (u.up + u.down)) + '%' : '—') : '—', 'Share of rated answers that got a thumbs up.')}</div>
-    <div class="card"><div class="card-head"><h3>Health</h3>${a.status === 'needs_setup' && !a.latestVersion ? `<a class="btn right" href="#/os/apps/vanikgpt/setup">Finish setup</a>` : ''}</div>${healthRows()}</div>`;
-}
-
 function saveBar() {
   const el = $('#savebar'); if (!el) return;
   const a = S.boot.app, d = dirty();
@@ -142,18 +142,41 @@ function saveBar() {
   el.innerHTML = `<span class="grow muted">${d ? 'You have unsaved changes.' : pendingDeploy() ? `Saved as config v${a.latestVersion}. Not live yet.` : a.deployedVersion ? `Config v${a.deployedVersion} is live.` : 'Choose a model, then save and deploy.'}</span>
     ${d ? `<button class="btn text" data-act="cfg-discard">Discard</button><button class="btn ghost" data-act="cfg-save">Save</button><button class="btn" data-act="cfg-save" data-deploy="1">Save and deploy</button>` : pendingDeploy() || (a.status === 'needs_setup' && a.latestVersion) ? `<button class="btn" data-act="deploy">Deploy</button>` : a.status === 'needs_setup' ? `<button class="btn" data-act="cfg-save" data-deploy="1" ${draft.models.length || draft.link.mode === 'custom' ? '' : 'disabled'}>Save and deploy</button>` : ''}`;
 }
-// ---------- Setup for VanikGPT. What the console sets is one compact card. The app options are one card too, shown here
-// when the console admins run VanikGPT, or inside VanikGPT when an app admin does. Both are drawn from the one draft.
+function tabOverview() {
+  const B = S.boot, a = B.app, c = a.config, u = cache.usage, g = B.gptAdmin || { storage: {}, names: [] }, st = g.storage || {}, st0 = appStatus();
+  const lastOk = (a.deploys || []).find(d => d.result === 'ok'), gb = st.gb || 20, used = (st.bytes || 0) / 1073741824;
+  const facts = [['Status', chip(st0[0], st0[1])], ['Appliance', esc(B.device.name)], ['Live setup', a.deployedVersion ? `Config v${a.deployedVersion}${lastOk ? ' · ' + ago(lastOk.endedAt) : ''}` : 'Not deployed'], ['Default model', esc(c.link && c.link.mode === 'custom' ? c.link.model + ' (custom)' : c.defaultModel || 'None')],
+    ['Run by', esc(g.names.length ? g.names.join(', ') : 'Console admins')], ['Storage', `${esc(st.name || 'Appliance database')} · ${gb} GB`]];
+  return `${a.status === 'needs_setup' && !a.latestVersion ? `<div class="banner" style="margin-bottom:16px">${icon('info_outline')}<span class="grow">VanikGPT is installed but not set up.</span><a class="btn" href="#/os/apps/vanikgpt/setup">Finish setup</a></div>` : ''}
+    <div class="card"><div class="facts">${facts.map(f => `<div><span class="small muted">${f[0]}</span><b>${f[1]}</b></div>`).join('')}</div></div>
+    <div class="card"><div class="card-head"><h3>Health</h3>${info('Each part VanikGPT needs. The i on each says what was found.')}${B.gateway.ok || (c.link && c.link.mode === 'custom') ? '' : `<button class="btn ghost right" data-act="gw-check">Check the gateway again</button>`}</div>${healthTiles()}</div>
+    <div class="grid two" style="align-items:start">
+      <div class="card"><div class="card-head"><h3>Questions a day</h3>${info('Questions asked in VanikGPT on each of the last 14 days.')}<span class="mono right">${u ? u.days14.reduce((n, d) => n + d.questions, 0) + ' in 14 days' : ''}</span></div>${u ? barChart(u.days14.map(d => ({ label: new Date(d.day).getDate(), tip: dayLabel(d.day), v: d.questions })), 'questions') : '<p class="muted">Loading…</p>'}</div>
+      <div class="card"><div class="card-head"><h3>People asking a day</h3>${info('How many different people asked at least one question on each of the last 14 days.')}<span class="mono right">${u ? u.activeWeek + ' this week' : ''}</span></div>${u ? barChart(u.days14.map(d => ({ label: new Date(d.day).getDate(), tip: dayLabel(d.day), v: d.people })), 'people') : '<p class="muted">Loading…</p>'}</div>
+    </div>
+    <div class="card"><div class="card-head"><h3>Space used</h3>${info('What VanikGPT keeps, out of the space set aside for it in Setup.')}<span class="mono right">${used < 1 ? Math.round(used * 1024) + ' MB' : used.toFixed(1) + ' GB'} of ${gb} GB</span></div><div class="meter" style="height:10px" data-tip="${st.chats || 0} chats and ${st.files || 0} files"><i style="width:${Math.max(1, Math.round(100 * used / gb))}%"></i></div><p class="small muted" style="margin-top:8px">${st.chats || 0} chats and ${st.files || 0} files on ${esc(st.name || 'the appliance database')}.</p></div>`;
+}
+
+// How VanikGPT reaches a model. Set in the console only, also when an app admin runs VanikGPT.
 let guardMode = 'prompt';
-// how VanikGPT reaches a model: with the console admins it is set here, with an app admin inside VanikGPT
 function modelRows(c, B) {
   const custom = c.link.mode === 'custom', serving = B.models.filter(m => m.kind === 'chat' && m.status === 'serving'), follows = B.gptSetup && B.gptSetup.follows;
-  return `${crow('Model', 'Vanik API gateway: the address and a key are filled in on every deploy, and every chat model serving in Model Hub is offered in chat. Custom endpoint: VanikGPT calls one server directly, so there is no usage on the API gateway page, no key made for it, and nothing follows the model if it moves.',
-      `<select class="input" style="width:auto" data-change="cfg-link" aria-label="How VanikGPT reaches a model"><option value="gateway" ${custom ? '' : 'selected'}>Vanik API gateway</option><option value="custom" ${custom ? 'selected' : ''}>Custom endpoint</option></select>${!custom && follows ? (serving.length ? `<select class="input" style="width:auto;max-width:200px" data-change="cfg-default-sel" aria-label="Default model">${serving.map(m => `<option value="${esc(m.id)}" ${c.defaultModel === m.id ? 'selected' : ''}>${esc(m.id)}${c.defaultModel === m.id ? ' (default)' : ''}</option>`).join('')}</select>` : `<a class="link small" href="#/os/models">Serve a chat model</a>`) : ''}`)}
+  const all = c.modelPick === 'all' || !Array.isArray(c.modelPick), offered = serving.filter(m => all || c.modelPick.includes(m.id));
+  return `${crow('Model', 'Vanik API gateway: the address and a key are filled in on every deploy. Choose which of the models serving in Model Hub people may pick, and the default. Custom endpoint: VanikGPT calls one server directly, so there is no usage on the API gateway page and nothing follows the model if it moves.',
+      `<select class="input" style="width:auto" data-change="cfg-link" aria-label="How VanikGPT reaches a model"><option value="gateway" ${custom ? '' : 'selected'}>Vanik API gateway</option><option value="custom" ${custom ? 'selected' : ''}>Custom endpoint</option></select>`)}
+    ${!custom && follows ? (serving.length ? `${crow('Models offered', 'The serving models people may pick in chat. A model that is parked in Model Hub drops out until it is served again.', dd('gpt-models', all ? `All serving models (${serving.length})` : `${offered.length} of ${serving.length} models`, [{ label: 'All serving models', on: all, act: 'cfg-mp-all' }, { head: 'Serving in Model Hub' }, ...serving.map(m => ({ label: `${m.id} · ${m.memGb} GB`, on: !all && c.modelPick.includes(m.id), act: 'cfg-mp-pick', v: m.id }))]))}
+      ${crow('Default model', 'The model a new chat starts with.', offered.length ? `<select class="input" style="width:auto;max-width:240px" data-change="cfg-default-sel" aria-label="Default model">${offered.map(m => `<option value="${esc(m.id)}" ${c.defaultModel === m.id ? 'selected' : ''}>${esc(m.id)}</option>`).join('')}</select>` : '<span class="small muted">Pick at least one model above</span>')}`
+      : crow('Models offered', 'Whatever is serving in Model Hub can be offered in chat.', `<span class="small muted">No chat model is serving.</span><a class="btn text" href="#/os/models">Model Hub</a>`)) : ''}
     ${custom ? `${crow('Address', 'Where an OpenAI style server answers, ending in /v1.', `<input class="input mono" style="width:300px" placeholder="http://10.0.0.12:9000/v1" value="${esc(c.link.url)}" data-on="gs-url" aria-label="Address of the model server">`)}
       ${crow('Model name', 'The name that server gives the model. Many servers call it /model.', `<input class="input mono" style="width:300px" placeholder="/model" value="${esc(c.link.model)}" data-on="gs-model" aria-label="Model name">`)}
       ${crow('Key', 'Only if that server asks for one. Kept in the vault and never shown again.', `<span class="small muted" id="gs-test-out"></span><button class="btn ghost" data-act="gs-test">Test</button><input class="input" style="width:210px" type="password" autocomplete="off" placeholder="${c.link.keySet ? 'Kept. Type to replace' : 'None needed'}" data-on="gs-key" aria-label="Key">`)}` : ''}`;
 }
+acts['cfg-mp-all'] = () => { draft.modelPick = 'all'; const s = S.boot.models.filter(m => m.kind === 'chat' && m.status === 'serving').map(m => m.id); if (!s.includes(draft.defaultModel)) draft.defaultModel = s[0] || null; rerender(); };
+acts['cfg-mp-pick'] = el => { const s = S.boot.models.filter(m => m.kind === 'chat' && m.status === 'serving').map(m => m.id), cur = Array.isArray(draft.modelPick) ? [...draft.modelPick] : [...s]; toggle(cur, el.dataset.v);
+  draft.modelPick = s.every(id => cur.includes(id)) ? 'all' : cur; const off = s.filter(id => draft.modelPick === 'all' || cur.includes(id)); if (!off.includes(draft.defaultModel)) draft.defaultModel = off[0] || null; rerender(); };
+// how many people the app's space holds at this space per person, against how many may use VanikGPT
+const fits = c => { const g = S.boot.gptAdmin || {}, gb = (c.storage || {}).gb || ((g.storage || {}).gb) || 20, room = Math.floor(gb * 1024 / Math.max(1, c.data.quotaMb)), people = g.people || 0;
+  return `<div class="crow-sub ${people > room ? 'warn' : ''}">${icon(people > room ? 'warning_amber' : 'groups')}<span>VanikGPT has ${gb} GB: room for <b>${room.toLocaleString()}</b> ${room === 1 ? 'person' : 'people'} at ${c.data.quotaMb} MB each. ${people} ${people === 1 ? 'person' : 'people'} can use VanikGPT today.${people > room ? ' Not everyone fits: give VanikGPT more space, or lower this.' : ''}</span></div>`; };
 function optionsCard(c, o) {
   const air = c.advanced.offline, w = (S.boot.gptSetup || { web: {} }).web, f = c.features, d = c.data, gated = chipOff => (air ? chip('Air-gapped', '', false) : chipOff);
   return `<div class="card setc"><div class="card-head"><h3>App options</h3></div>
@@ -166,7 +189,7 @@ function optionsCard(c, o) {
     <div class="cap">People's data</div>
     ${crow('Uploads', 'Lets people attach their own files to a chat.', sw('cfg-switch', c.safety.uploads, 'safety.uploads'))}
     ${c.safety.uploads ? `${later('personal-storage') ? '' : crow('Personal storage', 'On: a file a person uploads is kept in their own space, so they can use it again in later chats. Off: it lives only in the chat it was added to.', sw('cfg-data', d.personal, 'personal'))}
-      ${crow('Space per person', 'How much one person may keep in files. A file that would go over is refused, with a message that says why.', `<input class="input" style="width:96px" type="number" min="10" max="100000" value="${d.quotaMb}" data-on="cfg-quota" aria-label="Space per person in MB"><span class="small muted">MB</span>`)}` : ''}
+      ${crow('Space per person', 'How much one person may keep in files, out of the space set aside for VanikGPT. A file that would go over is refused, with a message that says why.', `<input class="input" style="width:96px" type="number" min="10" max="100000" value="${d.quotaMb}" data-on="cfg-quota" aria-label="Space per person in MB"><span class="small muted">MB</span>`)}${fits(c)}` : ''}
     ${crow('Temporary chats', 'On: a person\'s chats, and the files in them, are removed when they start a new session. It keeps storage small. Off: chats stay until the person deletes them.', sw('cfg-data', d.tempChats, 'tempChats'))}
     <div class="cap">Guardrail</div>
     ${crow('Guardrail', 'Prompt: plain instructions every chat follows, such as the tone to use or what never to advise on. Keywords: a question that names one of these words is not answered and is not sent to the model. Both apply.', `<div class="seg"><button class="${guardMode === 'prompt' ? 'on' : ''}" data-act="cfg-guard" data-v="prompt">Prompt</button><button class="${guardMode === 'words' ? 'on' : ''}" data-act="cfg-guard" data-v="words">Keywords${(c.safety.blockedTopics || []).length ? ` <span class="mono">${c.safety.blockedTopics.length}</span>` : ''}</button></div>`)}
@@ -185,8 +208,8 @@ function tabSetup() {
   const lost = `the ${g.storage.chats || 0} ${g.storage.chats === 1 ? 'chat' : 'chats'} and ${g.storage.files || 0} ${g.storage.files === 1 ? 'file' : 'files'} kept so far`;
   return `<div class="stack" style="gap:16px;max-width:820px">
     <div class="card setc"><div class="card-head"><h3>Set in the console</h3></div>
-      ${crow('Run by', 'Console admins: the app options are on this page. An app admin: the model and the app options are inside VanikGPT and leave this page.', `${managed ? `<span class="small muted">Advanced too</span>${info('Off: the advanced options stay on this page. On: the app admin has them, and they leave this page.')}${sw('cfg-admin-adv', c.admin.advanced)}` : ''}${runByDd({ key: 'gpt-run', p: 'cfg-admin', people, picked: c.admin.users })}`)}
-      ${managed ? crow('Model', 'Chosen inside VanikGPT by its admin.', `<span class="muted">${custom ? `Custom endpoint · ${esc(c.link.model)}` : `Vanik API gateway${c.defaultModel ? ' · ' + esc(c.defaultModel) : ''}`}</span><a class="btn text" href="#/gpt/manage">Open</a>`) : modelRows(c, B)}
+      ${crow('Run by', 'Console admins: the app options are on this page. An app admin: the app options are managed inside VanikGPT. The model, knowledge, storage and access always stay in the console.', `${managed ? `<span class="small muted">Delegate advanced settings</span>${info('Off: advanced settings stay with console admins on this page. On: the app admin manages them inside VanikGPT.')}${sw('cfg-admin-adv', c.admin.advanced)}` : ''}${runByDd({ key: 'gpt-run', p: 'cfg-admin', people, picked: c.admin.users })}`)}
+      ${modelRows(c, B)}
       ${crow('Knowledge', 'Each knowledge base says which apps may use it. People still get answers only from the ones they are allowed.', `<span class="muted">${kbs.length ? `${kbs.length} ${kbs.length === 1 ? 'knowledge base' : 'knowledge bases'}` : 'None open to VanikGPT yet'}</span><a class="btn text" href="#/os/knowledge">Manage</a>`)}
       ${storageRow({ p: 'cfg-store', store: c.storage, saved: { ...STORE0, ...(live.storage || {}) }, stores: g.stores, lost })}
       ${crow('People', 'Who can use VanikGPT.', accessDd({ key: 'gpt-acc', p: 'cfg-acc', access: c.access, teams: B.teams, people }))}
@@ -199,7 +222,7 @@ function tabSetup() {
 // the model and the options inside VanikGPT, for the app admin
 export function gptOptionsPage() {
   ensureDraft(); const g = S.boot.gptAdmin; queueMicrotask(saveBar);
-  return `<div class="stack" style="gap:16px;max-width:820px">${optionsCard(draft, { adv: g.advanced, model: true })}${g.advanced ? '' : `<p class="small muted">${icon('lock')} ${later('air-gapped') ? 'Daily questions are' : 'Daily questions and Air-gapped are'} kept in the Vanik Edge console.</p>`}<div class="savebar" id="savebar"></div></div>`;
+  return `<div class="stack" style="gap:16px;max-width:820px">${optionsCard(draft, { adv: g.advanced, model: false })}${g.advanced ? '' : `<p class="small muted">${icon('lock')} ${later('air-gapped') ? 'Daily questions are' : 'Daily questions and Air-gapped are'} kept in the Vanik Edge console.</p>`}<div class="savebar" id="savebar"></div></div>`;
 }
 acts['cfg-admin-none'] = () => { draft.admin = { users: [], advanced: false }; rerender(); };
 acts['cfg-admin-pick'] = el => { toggle(draft.admin.users, el.dataset.v); if (!draft.admin.users.length) draft.admin.advanced = false; rerender(); };
@@ -214,7 +237,7 @@ ins['cfg-store'] = el => { draft.storage.store = el.value; rerender(); };
 ins['cfg-store-gb'] = el => { draft.storage.gb = Math.max(1, Math.min(4000, Math.round(+el.value || 20))); rerender(); };
 acts['cfg-feat'] = el => { draft.features[el.dataset.k] = !draft.features[el.dataset.k]; rerender(); };
 acts['cfg-data'] = el => { draft.data[el.dataset.k] = !draft.data[el.dataset.k]; rerender(); };
-ins['cfg-quota'] = el => { draft.data.quotaMb = Math.max(10, Math.round(+el.value || 500)); saveBar(); };
+ins['cfg-quota'] = el => { draft.data.quotaMb = Math.max(10, Math.round(+el.value || 500)); saveBar(); const f = el.closest('.crow') && el.closest('.crow').nextElementSibling; if (f && f.classList.contains('crow-sub')) f.outerHTML = fits(draft); };
 acts['cfg-guard'] = el => { guardMode = el.dataset.v; rerender(); };
 // air-gapped: nothing that needs the internet stays on
 acts['cfg-air'] = () => { const on = !draft.advanced.offline; draft.advanced.offline = on; if (on) { draft.web.on = false; draft.features.connectors = false; } rerender(); };
@@ -258,20 +281,29 @@ acts['cfg-save'] = async el => {
 function tabUsage() {
   const u = cache.usage;
   if (!u) return `<p class="muted">Loading…</p>`;
-  if (!u.questions) return `<div class="empty">${icon('insights')}No questions asked yet. Numbers show up here once people start chatting.</div>`;
-  const max = Math.max(1, ...u.days.map(d => d.questions)), answers = u.modes.model + u.modes.documents + u.modes.unavailable + (u.modes.tool || 0) + (u.modes.search || 0) || 1;
-  const share = (n, label, tip) => `<div class="set-row"><div class="grow"><div class="lbl">${label} ${info(tip)}</div><div class="meter" style="margin-top:8px"><i style="width:${Math.round(100 * n / answers)}%"></i></div></div><b>${n}</b></div>`;
-  return `<div class="grid four" style="margin-bottom:16px">${stat('Questions, all time', u.questions)}${stat('People asking', u.activeUsers)}${stat('Average answer time', u.avgMs ? (u.avgMs / 1000).toFixed(1) + ' s' : '—')}${stat('Tokens', u.tokens.toLocaleString(), 'Input and output combined. Estimated when the model does not report it.')}</div>
-    <div class="grid two">
-      <div class="card"><div class="card-head"><h3>Questions per day</h3><span class="mono">last 7 days</span></div><div class="bars">${u.days.map(d => `<div><span class="mono">${d.questions || ''}</span><i style="height:${Math.round(100 * d.questions / max)}%"></i><span class="mono">${new Date(d.day).toLocaleDateString(undefined, { weekday: 'short' })}</span></div>`).join('')}</div></div>
-      <div class="card"><div class="card-head"><h3>How answers were made</h3></div>${share(u.modes.model, 'By the model', 'The model wrote the answer, using your documents when they matched.')}${share(u.modes.documents, 'From documents only', 'The model could not be reached, so the answer was built from matching passages.')}${share(u.modes.unavailable, 'No answer', 'The model could not be reached and no document matched.')}${share((u.modes.tool || 0) + (u.modes.search || 0), 'By an ability or search', 'An exact plugin result, a browser run, or passages only.')}</div>
+  if (!u.questions) return `<div class="empty">${icon('insights')}No questions asked yet. Figures show up here once people start chatting.</div>`;
+  const pct = (n, d) => (d ? Math.round(100 * n / d) : 0), delta = u.prev ? Math.round(100 * (u.week - u.prev) / u.prev) : null, answers = u.modes.model + u.modes.documents + u.modes.unavailable + (u.modes.tool || 0) + (u.modes.search || 0) || 1;
+  const share = (n, label, tip) => `<div class="set-row"><div class="grow"><div class="lbl">${label} ${info(tip)}</div><div class="meter" style="margin-top:8px"><i style="width:${pct(n, answers)}%"></i></div></div><b>${pct(n, answers)}%</b></div>`;
+  const cmax = Math.max(1, ...u.collections.map(c => c.n)), pmax = Math.max(1, ...u.people.map(p => p.questions)), sec = t => (t ? (t / 1000).toFixed(1) + ' s' : '—');
+  return `<div class="grid three" style="margin-bottom:16px">
+      ${stat('Questions this week', u.week, 'Questions asked in the last 7 days.', delta === null ? 'None the week before' : `${delta >= 0 ? '+' : ''}${delta}% on the week before (${u.prev})`)}
+      ${stat('People asking this week', `${u.activeWeek} of ${u.canUse}`, 'People who asked at least one question in the last 7 days, out of everyone allowed to use VanikGPT.', `${pct(u.activeWeek, u.canUse)}% of those allowed`)}
+      ${stat('Questions per person', u.activeWeek ? (u.week / u.activeWeek).toFixed(1) : '—', 'This week, for people who asked at all.', 'this week')}
+      ${stat('Answers with sources', pct(u.sourced, u.answers) + '%', 'Answers that cite at least one document. Higher means people ask about their own knowledge.', `${u.sourced} of ${u.answers} answers`)}
+      ${stat('Helpful answers', u.up + u.down ? pct(u.up, u.up + u.down) + '%' : '—', 'Share of rated answers that got a thumbs up.', `${u.up + u.down} rated`)}
+      ${stat('Answer time', sec(u.avgMs), 'Average time to a full answer, and the time 9 in 10 answers come within.', `9 in 10 within ${sec(u.p90Ms)}`)}
+    </div>
+    <div class="grid two" style="align-items:start">
+      <div class="card"><div class="card-head"><h3>Questions a day</h3>${info('The last 14 days.')}</div>${barChart(u.days14.map(d => ({ label: new Date(d.day).getDate(), tip: dayLabel(d.day), v: d.questions })), 'questions')}</div>
+      <div class="card"><div class="card-head"><h3>Questions by hour</h3>${info('All questions so far, by the hour of the day they were asked. Shows when the appliance is busiest.')}</div>${barChart(u.hours.map((v, h) => ({ label: h % 6 === 0 ? String(h).padStart(2, '0') : '', tip: String(h).padStart(2, '0') + ':00', v })), 'questions')}</div>
+      <div class="card"><div class="card-head"><h3>How answers were made</h3></div>${share(u.modes.model, 'By the model', 'The model wrote the answer, using your documents when they matched.')}${share(u.modes.documents, 'From documents only', 'The model could not be reached, so the answer was built from matching passages.')}${share(u.modes.unavailable, 'No answer', 'The model could not be reached and no document matched.')}</div>
+      <div class="card"><div class="card-head"><h3>Knowledge cited</h3>${info('How often each knowledge base was cited in an answer.')}</div>${u.collections.length ? u.collections.map(c => `<div class="set-row"><span class="grow">${esc(c.name)}</span><div class="meter" style="width:120px"><i style="width:${pct(c.n, cmax)}%"></i></div><b style="width:32px;text-align:right">${c.n}</b></div>`).join('') : `<p class="small muted">No answer has cited a document yet.</p>`}</div>
       <div class="card"><div class="card-head"><h3>Feedback</h3><span class="right row">${chip(u.up + ' helpful', 'ok', false)}${chip(u.down + ' not helpful', u.down ? 'warn' : '', false)}</span></div>
         ${Object.keys(u.reasons).length ? Object.entries(u.reasons).map(([r, n]) => `<div class="set-row"><span class="grow">${esc(r)}</span><b>${n}</b></div>`).join('') : `<p class="small muted">No thumbs down yet.</p>`}
         ${u.notes.length ? `<div style="margin-top:14px" class="stack">${u.notes.map(n => `<div class="small"><span class="faint">${esc(n.userName)} · ${when(n.at)} · ${esc(n.reason)}</span><br>${esc(n.note)}</div>`).join('')}</div>` : ''}
         <p class="small faint" style="margin-top:14px">Admins see ratings and notes. Chat content stays with the person who wrote it.</p></div>
-      <div class="card"><div class="card-head"><h3>Collections cited</h3></div>${u.collections.length ? u.collections.map(c => `<div class="set-row"><span class="grow">${esc(c.name)}</span><b>${c.n}</b></div>`).join('') : `<p class="small muted">No answer has cited a document yet.</p>`}</div>
-    </div>
-    <div class="card" style="margin-top:16px"><div class="card-head"><h3>People</h3></div><table class="list"><tr><th>Name</th><th>Questions</th><th>Last asked</th></tr>${u.people.map(p => `<tr><td>${esc(p.name)}</td><td>${p.questions}</td><td class="muted">${ago(p.last)}</td></tr>`).join('')}</table></div>`;
+      <div class="card"><div class="card-head"><h3>People</h3>${info('Questions by person, all time. Chat content is never shown here.')}</div><table class="list"><tr><th>Name</th><th>Questions</th><th></th><th>Last asked</th></tr>${u.people.map(p => `<tr><td>${esc(p.name)}</td><td>${p.questions}</td><td><div class="meter" style="width:90px"><i style="width:${pct(p.questions, pmax)}%"></i></div></td><td class="muted">${ago(p.last)}</td></tr>`).join('')}</table></div>
+    </div>`;
 }
 
 function diff(a, b) {

@@ -13,9 +13,12 @@ module.exports = function install({ db, on, err, now, audit, A, byId, MVP, save,
   const follows = () => cfg().followHub === true || (cfg().followHub === undefined && MVP);
   const custom = () => !!cfg().link && cfg().link.mode === 'custom';
   const served = () => db.models.filter(m => m.kind === 'chat' && m.status === 'serving').map(m => m.id);
+  // the models the console offers in chat: every serving chat model, or the ones the admin ticked that are serving
+  const cleanPick = p => (Array.isArray(p) ? [...new Set(p.map(String))].filter(id => db.models.some(m => m.id === id && m.kind === 'chat')) : 'all');
+  const picked = p => (Array.isArray(p) ? served().filter(id => p.includes(id)) : served());
   function follow() {
     if (db.app.status === 'not_installed' || custom() || !follows()) return;
-    const c = cfg(), list = served();
+    const c = cfg(), list = picked(c.modelPick);
     if (JSON.stringify(c.models) === JSON.stringify(list) && (c.defaultModel === null ? !list.length : list.includes(c.defaultModel))) return;
     c.models = list; if (!list.includes(c.defaultModel)) c.defaultModel = list[0] || null;
   }
@@ -126,5 +129,5 @@ module.exports = function install({ db, on, err, now, audit, A, byId, MVP, save,
   }, A);
 
   const boot = admin => ({ follows: follows(), custom: custom(), web: { ...webCfg(), left: left(), used: use().used }, embedModel: embedModel(), apps: apps(), webByPerson: admin ? use().by : undefined });
-  return { follow, follows, custom, served, cleanLink, cleanWeb, webCfg, search, why, cleanApps, published, usable, embedModel, teams, boot };
+  return { follow, follows, custom, served, picked, cleanPick, cleanLink, cleanWeb, webCfg, search, why, cleanApps, published, usable, embedModel, teams, boot };
 };
