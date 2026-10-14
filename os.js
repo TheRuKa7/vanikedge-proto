@@ -2,7 +2,7 @@
 import { hint } from './hints.js';
 import { ADMIN0, STORE0, FEAT0, DATA0, crow, sw, runByDd, accessDd, storageRow, storesBody } from './app_admin.js';
 import { LINK0, WEB0, bindSetup, embedCard, stateChip, publishBar, appsCard, appNames, usedBy, teamsCard } from './gpt_setup.js';
-import { inScope } from './scope.js';
+import { inScope, later } from './scope.js';
 import { navToggle, S, $, esc, icon, info, chip, initials, LOGO, go, bytes, ago, when, api, load, refresh, rerender, acts, ins, toast, modal, confirmBox, menu, themeButton, userButton, ROLE, accessDrafts, accessChanged, accessPicker, accessLabel, extractFile, pickFiles, downloadText } from './core.js';
 
 const NAV = [['home', 'Home', 'home'], ['apps', 'Apps', 'apps'], ['knowledge', 'Knowledge', 'library_books'], ['models', 'Models', 'memory'], ['people', 'People', 'group'], ['activity', 'Activity', 'insights'], ['devices', 'Appliance', 'dns']];
@@ -158,14 +158,14 @@ function optionsCard(c, o) {
   const air = c.advanced.offline, w = (S.boot.gptSetup || { web: {} }).web, f = c.features, d = c.data, gated = chipOff => (air ? chip('Air-gapped', '', false) : chipOff);
   return `<div class="card setc"><div class="card-head"><h3>App options</h3></div>
     ${o.model ? `<div class="cap">Model</div>${modelRows(c, S.boot)}` : ''}
-    <div class="cap">Abilities</div>
-    ${crow('Web search', 'Lets a chat search the internet. When a question needs the web in a chat where it is off, the person is told VanikGPT will switch it on and that it may use credits. One search is one credit.', `${gated(c.web.on ? `<span class="small muted">${w.used || 0} used of</span><input class="input" style="width:84px" type="number" min="0" max="100000" value="${c.web.credits}" data-on="gs-credits" aria-label="Browsing credits a month"><span class="small muted">credits a month</span>` : '')}${sw('gs-web', c.web.on && !air, '', air)}`)}
-    ${crow('Connectors', 'Lets a chat read from, and act in, connected systems such as mail, a drive or the ERP. The systems themselves are connected in the console.', `${gated('')}${sw('cfg-feat', f.connectors && !air, 'connectors', air)}`)}
-    ${crow('Images', 'Lets a chat make a picture. Needs an image model serving in Model Hub.', sw('cfg-feat', f.images, 'images'))}
-    ${crow('Video', 'Lets a chat make a short video. Needs a video model serving in Model Hub.', sw('cfg-feat', f.video, 'video'))}
+    ${['web-search', 'connectors', 'images', 'video'].every(later) ? '' : '<div class="cap">Abilities</div>'}
+    ${later('web-search') ? '' : crow('Web search', 'Lets a chat search the internet. When a question needs the web in a chat where it is off, the person is told VanikGPT will switch it on and that it may use credits. One search is one credit.', `${gated(c.web.on ? `<span class="small muted">${w.used || 0} used of</span><input class="input" style="width:84px" type="number" min="0" max="100000" value="${c.web.credits}" data-on="gs-credits" aria-label="Browsing credits a month"><span class="small muted">credits a month</span>` : '')}${sw('gs-web', c.web.on && !air, '', air)}`)}
+    ${later('connectors') ? '' : crow('Connectors', 'Lets a chat read from, and act in, connected systems such as mail, a drive or the ERP. The systems themselves are connected in the console.', `${gated('')}${sw('cfg-feat', f.connectors && !air, 'connectors', air)}`)}
+    ${later('images') ? '' : crow('Images', 'Lets a chat make a picture. Needs an image model serving in Model Hub.', sw('cfg-feat', f.images, 'images'))}
+    ${later('video') ? '' : crow('Video', 'Lets a chat make a short video. Needs a video model serving in Model Hub.', sw('cfg-feat', f.video, 'video'))}
     <div class="cap">People's data</div>
     ${crow('Uploads', 'Lets people attach their own files to a chat.', sw('cfg-switch', c.safety.uploads, 'safety.uploads'))}
-    ${c.safety.uploads ? `${crow('Personal storage', 'On: a file a person uploads is kept in their own space, so they can use it again in later chats. Off: it lives only in the chat it was added to.', sw('cfg-data', d.personal, 'personal'))}
+    ${c.safety.uploads ? `${later('personal-storage') ? '' : crow('Personal storage', 'On: a file a person uploads is kept in their own space, so they can use it again in later chats. Off: it lives only in the chat it was added to.', sw('cfg-data', d.personal, 'personal'))}
       ${crow('Space per person', 'How much one person may keep in files. A file that would go over is refused, with a message that says why.', `<input class="input" style="width:96px" type="number" min="10" max="100000" value="${d.quotaMb}" data-on="cfg-quota" aria-label="Space per person in MB"><span class="small muted">MB</span>`)}` : ''}
     ${crow('Temporary chats', 'On: a person\'s chats, and the files in them, are removed when they start a new session. It keeps storage small. Off: chats stay until the person deletes them.', sw('cfg-data', d.tempChats, 'tempChats'))}
     <div class="cap">Guardrail</div>
@@ -176,7 +176,7 @@ function optionsCard(c, o) {
 }
 const advancedRows = c => `<div class="cap">Advanced</div>
     ${crow('Daily questions', 'For each person, each day. It stops one person from using all the capacity. 0 means no limit.', `<input class="input" style="width:96px" type="number" min="0" max="10000" value="${c.safety.dailyLimit}" data-on="cfg-limit" aria-label="Questions per person per day">`)}
-    ${crow('Air-gapped', 'Yes: VanikGPT never reaches the internet. Web search and connectors switch off by themselves and cannot be switched on.', sw('cfg-air', c.advanced.offline))}`;
+    ${later('air-gapped') ? '' : crow('Air-gapped', 'Yes: VanikGPT never reaches the internet. Web search and connectors switch off by themselves and cannot be switched on.', sw('cfg-air', c.advanced.offline))}`;
 function tabSetup() {
   ensureDraft();
   const B = S.boot, c = draft, chat = B.models.filter(m => m.kind === 'chat'), live = B.app.config, managed = c.admin.users.length > 0, g = B.gptAdmin || { names: [], storage: {} };
@@ -199,7 +199,7 @@ function tabSetup() {
 // the model and the options inside VanikGPT, for the app admin
 export function gptOptionsPage() {
   ensureDraft(); const g = S.boot.gptAdmin; queueMicrotask(saveBar);
-  return `<div class="stack" style="gap:16px;max-width:820px">${optionsCard(draft, { adv: g.advanced, model: true })}${g.advanced ? '' : `<p class="small muted">${icon('lock')} Daily questions and Air-gapped are kept in the Vanik Edge console.</p>`}<div class="savebar" id="savebar"></div></div>`;
+  return `<div class="stack" style="gap:16px;max-width:820px">${optionsCard(draft, { adv: g.advanced, model: true })}${g.advanced ? '' : `<p class="small muted">${icon('lock')} ${later('air-gapped') ? 'Daily questions are' : 'Daily questions and Air-gapped are'} kept in the Vanik Edge console.</p>`}<div class="savebar" id="savebar"></div></div>`;
 }
 acts['cfg-admin-none'] = () => { draft.admin = { users: [], advanced: false }; rerender(); };
 acts['cfg-admin-pick'] = el => { toggle(draft.admin.users, el.dataset.v); if (!draft.admin.users.length) draft.admin.advanced = false; rerender(); };

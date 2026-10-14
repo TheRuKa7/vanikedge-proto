@@ -1,6 +1,7 @@
 // Vanik Sense after the MVP: what a call was read for (by its kind), the roll-up of many calls, the library that makes
 // the next call better, and the connections. Server side: sense_insight.js and sense.js. Drawn by sense.js.
 import { $, esc, icon, info, chip, go, api, rerender, acts, ins, toast, modal, confirmBox } from './core.js';
+import { later } from './scope.js';
 import { get, P } from './suite.js';
 
 const loading = '<p class="muted">Loading…</p>';
@@ -78,7 +79,7 @@ const IG_LATER = [['Google Meet', 'video_call', 'Meetings held in Google Meet.']
 export const integrationsPage = s => `<p class="sub" style="margin:0 0 18px">What Vanik Sense reads from and sends to. You connect your own; your admin decides which are offered.</p>
   <div class="ig">${s.connections.map(c => `<div class="card ig-c ${c.on ? 'on' : ''}"><div class="row"><span class="avatar sq">${icon(IG_ICON[c.key] || 'extension')}</span><div class="grow"><h3>${esc(c.name)}</h3></div>${c.on ? chip('Connected', 'ok') : ''}</div><p class="small muted">${esc(c.what)}</p>
       ${c.key === 'slack' && c.on ? `<input class="input" placeholder="#channel for minutes" value="${esc(c.channel)}" data-change="in-chan" aria-label="Slack channel">` : ''}<div class="row"><span class="grow"></span><button class="btn ${c.on ? 'ghost' : ''}" data-act="in-conn" data-k="${c.key}" ${c.on ? 'data-on="1"' : ''}>${c.on ? 'Disconnect' : 'Connect'}</button></div></div>`).join('')}
-    ${IG_LATER.map(x => `<div class="card ig-c later"><div class="row"><span class="avatar sq">${icon(x[1])}</span><div class="grow"><h3>${x[0]}</h3></div>${chip('Later', '', false)}</div><p class="small muted">${x[2]}</p></div>`).join('')}</div>
+    ${later('later-integrations') ? '' : IG_LATER.map(x => `<div class="card ig-c later"><div class="row"><span class="avatar sq">${icon(x[1])}</span><div class="grow"><h3>${x[0]}</h3></div>${chip('Later', '', false)}</div><p class="small muted">${x[2]}</p></div>`).join('')}</div>
   ${s.connections.length ? '' : `<div class="empty">${icon('extension')}Your admin has not made any connection available yet.</div>`}`;
 
 // ---------- Insights: figures across a person's conversations, and the topics the company tracks

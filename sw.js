@@ -2,7 +2,7 @@
 // The server files are loaded as text and given small stand-ins for http, fs, crypto, path, os and child_process.
 // State is kept in this browser (IndexedDB). Nothing is sent anywhere.
 const BASE = new URL('./', self.location).pathname.replace(/\/$/, '');
-const BUILD = '20261013123227'; // set by build_demo.mjs; the page carries the same mark
+const BUILD = '20261014063710'; // set by build_demo.mjs; the page carries the same mark
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 // ---- storage: one JSON document
@@ -35,7 +35,7 @@ const crypto_ = {
 };
 
 // ---- other stand-ins
-const DBKEY = 'db-v20'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
+const DBKEY = 'db-v25'; // a new key each release that changes the stored shape, so an older saved workspace is not reused
 let dbText = null, handler = null;
 const fs_ = { existsSync: p => /db\.json$/.test(p) && dbText !== null, readFileSync: () => dbText, writeFileSync: (p, t) => { if (/db\.json$/.test(p)) { dbText = t; kvSet(DBKEY, t); } }, mkdirSync() {}, statSync() { throw new Error('no files here'); }, readdirSync() { throw new Error('no files here'); }, mkdtempSync: p => p + 'x', rmSync() {}, unlinkSync() {}, createReadStream() { throw new Error('no files here'); } };
 const path_ = { join: (...a) => a.join('/').replace(/\/+/g, '/'), normalize: p => p, resolve: (...a) => a.join('/'), dirname: p => p.replace(/\/[^/]*$/, ''), extname: p => (p.match(/\.[^./]+$/) || [''])[0], relative: (a, b) => b.replace(a, '').replace(/^\//, '') };

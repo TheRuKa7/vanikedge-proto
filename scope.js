@@ -7,14 +7,20 @@ const OUT = [
   /^#\/gpt\/(assistants|flows|routines|automations|tasks|calendar|library|saved|notes|workspace|playground|admin)(\/|$)/, /^#\/gpt\/new\//, /^#\/gpt\/settings\/(all|api)/,
   // app users: personal API keys
   /^#\/me\/keys/,
+  // Vanik Sense: the readings for each kind of call and the Library come in a later release
+  /^#\/app\/sense\/(insights|library)(\/|$)/,
 ];
+// Built, and kept for a later release: hidden in the MVP. Each one is checked where its control is drawn.
+const LATER = ['web-search', 'connectors', 'images', 'video', 'personal-storage', 'air-gapped', 'add-store', // VanikGPT and the console
+  'kinds', 'confidence', 'library', 'join-recap', 'record', 'desktop-app', 'later-integrations', 'way-gcal', 'way-slack', 'way-zoom', 'way-mic', 'way-autoMic']; // Vanik Sense
+export const later = k => LATER.includes(k);
 // buttons that start something outside the MVP
 const ACTS = ['temp-toggle', 'mic', 'kb-note', 'doc-tasks', 'notif', 'st-archived', 'me-archive-all', 'my-key-new'];
 // menu entries that do the same
 const MENU = ['Admin', 'Instructions for this chat', 'Archive', 'Use an agent', 'Saved prompts', 'Make tasks from this', 'Save as a note', 'Read aloud', 'Turn into a routine', 'Save as a prompt', 'Remember this'];
 
 export const inScope = hash => !OUT.some(r => r.test(hash || ''));
-export const scopeHome = hash => ((hash || '').startsWith('#/gpt') ? '#/gpt' : (hash || '').startsWith('#/me') ? '#/me' : '#/os/home');
+export const scopeHome = hash => ((hash || '').startsWith('#/gpt') ? '#/gpt' : (hash || '').startsWith('#/app/sense') ? '#/app/sense' : (hash || '').startsWith('#/me') ? '#/me' : '#/os/home');
 export const menuInScope = items => {
   const kept = items.filter(i => i && !(typeof i === 'object' && MENU.includes(i.label)));
   return kept.filter((i, n) => i !== '-' || (n > 0 && n < kept.length - 1 && kept[n - 1] !== '-')); // no divider first, last or doubled

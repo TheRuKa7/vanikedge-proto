@@ -4,7 +4,7 @@
 // What stands in for the real thing: meetings are stored samples, minutes are picked out by plain rules, and emails,
 // Teams messages and forwards are recorded, not sent. Plan: ../VANIK_EDGE_PLAN.md, section 8.
 module.exports = function install(ctx) {
-  const { db, on, err, uid, now, audit, DEMO, need, roleOf } = ctx;
+  const { db, on, err, uid, now, audit, DEMO, need, roleOf, MVP } = ctx;
   const S = db.sense = db.sense || { meetings: [], focus: {}, prefs: {}, intro: {} };
   const day = (d = 0) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
   S.library = S.library || []; S.conn = S.conn || {}; S.upcoming = S.upcoming || [];
@@ -13,7 +13,7 @@ module.exports = function install(ctx) {
   const IN = require('./sense_insight')({ db, day }); // after the MVP: the kind of call, and what each kind is read for
   const KINDS = ['Pitch', 'Answer to a concern', 'Question list', 'Minutes', 'Checklist'];
   const person = id => db.users.find(x => x.id === id), mailOf = u => u.email || u.name.toLowerCase().replace(/[^a-z]+/g, '.') + '@example.com', domain = u => mailOf(u).split('@')[1];
-  const SU = require('./sense_setup')({ db, S, err, uid, now, audit, roleOf, mailOf, TYPES: IN.TYPES }); // first run, reporting lines, team focus, admin controls
+  const SU = require('./sense_setup')({ db, S, err, uid, now, audit, roleOf, mailOf, TYPES: IN.TYPES, MVP }); // first run, reporting lines, team focus, admin controls
   const STOP = new Set('what when where which with that this from have were will would about their there your they them then than into over happened'.split(' '));
   const WD = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const dueOn = (s, at) => { const base = new Date(at), m = String(s || '').toLowerCase(), add = n => new Date(base.getTime() + n * 864e5).toISOString().slice(0, 10); if (!m) return ''; if (/^\d{4}-\d{2}-\d{2}$/.test(m)) return m; if (m === 'tomorrow') return add(1); if (m === 'end of week') return add((5 - base.getUTCDay() + 7) % 7 || 7); const w = WD.indexOf(m); return w < 0 ? '' : add((w - base.getUTCDay() + 7) % 7 || 7); };

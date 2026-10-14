@@ -3,7 +3,7 @@
 // the company's reporting lines (from a sheet or from the HR system), the rule for what a manager may see of the calls below
 // them, and the controls a product admin holds. The same controls are shown in the Vanik Edge console when no product admin
 // is named. Loaded by sense.js. Stand-ins: an HR system 'connection' loads sample people; nothing is called.
-module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, TYPES }) {
+module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, TYPES, MVP }) {
   const DEPTS = ['Sales', 'Customer support', 'Operations', 'Procurement', 'HR and people', 'Finance', 'IT', 'Engineering', 'Product', 'Marketing', 'Legal', 'Leadership', 'Other'];
   const LEVELS = ['Individual contributor', 'Manager', 'Senior leader'];
   const GOALS = ['Capture actions and who owns them', 'Stop taking notes by hand', 'Catch up on meetings I missed', 'Understand customer calls', 'See patterns across many meetings', 'Draft follow-ups', 'Share minutes with my team'];
@@ -11,7 +11,7 @@ module.exports = function build({ db, S, err, uid, now, audit, roleOf, mailOf, T
   const SYSTEMS = ['Keka', 'Darwinbox', 'Zoho People', 'greytHR', 'HROne', 'FlexiEle', 'SAP SuccessFactors', 'Workday', 'BambooHR', 'Microsoft Entra ID', 'Google Workspace'];
   const DEFAULTS = { team: { reach: 'off', detail: 'minutes', dotted: false, never: ['One to one', 'Hiring interview'] }, notice: true, skip: [], upload: true, external: false, exportOn: true, keepDays: 0, score: true,
     sources: { teams: true, outlook: true, gcal: true, slack: true, zoom: false, mic: true, autoMic: false }, adminAdvanced: false, storage: { store: 'st_db', kind: 'db', gb: 50 },
-    avail: { teams: true, outlook: true, gcal: true, slack: true, zoom: false, upload: true, mic: true, autoMic: false }, join: 'all', recap: 'company' };
+    avail: { teams: true, outlook: true, gcal: !MVP, slack: !MVP, zoom: false, upload: true, mic: !MVP, autoMic: false } /* the MVP release: Teams, Outlook, and notes or transcripts by hand */, join: 'all', recap: 'company' };
   S.profile = S.profile || {}; S.org = S.org || { people: [], source: '', at: '', by: '' };
   S.policy = { ...DEFAULTS, ...(S.policy || {}), team: { ...DEFAULTS.team, ...((S.policy || {}).team || {}) }, sources: { ...DEFAULTS.sources, ...((S.policy || {}).sources || {}) }, avail: { ...DEFAULTS.avail, ...((S.policy || {}).avail || {}) }, storage: { ...DEFAULTS.storage, ...((S.policy || {}).storage || {}) } };
   const P = () => S.policy, isAdmin = u => u.role !== 'user' || roleOf(u, 'sense') === 'Sense admin', guard = u => { if (!isAdmin(u)) throw err(403, 'Only a Vanik Sense admin can change this.'); };

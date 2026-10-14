@@ -872,7 +872,7 @@ Object.assign(MO, require('./more')({ db, on, err, uid, now, audit, isAdmin, A, 
 Object.assign(PA, require('./parity')({ db, on, err, uid, now, audit, isAdmin, A, byId, needGpt }));
 Object.assign(SU, require('./suite')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, cleanAccess, search, DEMO, freeGb, addDocument, canWrite: (u, c) => WK.canWrite(u, c), call: (...a) => call(...a), issueKey: (...a) => FX.issueKey(...a), revokeSystemKeys: n => FX.revokeSystemKeys(n) }));
 Object.assign(RL, require('./real')({ db, on, err, uid, now, audit, isAdmin, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id), toSense: (...a) => SN.fromTranscript(...a) }));
-Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
+Object.assign(SN, require('./sense')({ db, on, err, uid, now, audit, DEMO, MVP, need: (u, id) => SU.need(u, id), roleOf: (u, id) => SU.roleOf(u, id) }));
 Object.assign(PL, require('./plane')({ db, on, err, uid, now, audit, isAdmin, A, byId, allowed, DEMO, usedGb, addDocument, attention, canUseGpt, canWrite: (u, c) => WK.canWrite(u, c), openTasks: u => WK.openTasks(u), suiteApps: () => SU.apps(), suiteBoot: u => SU.boot(u), issueKey: (...a) => FX.issueKey(...a) }));
 Object.assign(AA, require('./app_admin')({ db, on, err, audit, isAdmin, needGpt, A, uid, now, call: (...a) => call(...a) }));
 Object.assign(GS, require('./gpt_setup')({ db, on, err, now, audit, A, byId, MVP, save, needGpt, suiteApps: () => SU.apps() }));

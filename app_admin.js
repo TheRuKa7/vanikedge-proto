@@ -2,6 +2,7 @@
 // list (who runs the app, who can use it, which ways in are available), the storage row, and the console's list of data stores.
 // With an app admin named, the app options are inside the app only.
 import { esc, icon, info, api, rerender, acts, toast, modal, confirmBox, ago } from './core.js';
+import { later } from './scope.js';
 
 export const ADMIN0 = { users: [], advanced: false }, STORE0 = { store: 'st_db', kind: 'db', gb: 20 }, FEAT0 = { connectors: false, images: false, video: false }, DATA0 = { personal: true, quotaMb: 500, tempChats: false };
 
@@ -33,10 +34,10 @@ let ST = null;
 const WHERE = { postgres: 'db.company.internal:5432/vanik', s3: 's3://company-vanik/chats', disk: 'DGX-02:/data/vanik', nfs: 'nas01:/export/vanik' };
 export function storesBody() {
   if (!ST) { api('GET', '/api/stores').then(d => { ST = d; rerender(); }).catch(e => toast(e.message, 'err')); return '<p class="muted">Loading…</p>'; }
-  return `<div class="page-head"><div class="grow"><h1>Data stores</h1><p class="sub">Where apps may keep what they store. Set here once; each app picks one on its Setup page.</p></div><button class="btn lg" data-act="store-new">${icon('add')}Add a store</button></div>
+  return `<div class="page-head"><div class="grow"><h1>Data stores</h1><p class="sub">Where apps may keep what they store. Set here once; each app picks one on its Setup page.</p></div>${later('add-store') ? '' : `<button class="btn lg" data-act="store-new">${icon('add')}Add a store</button>`}</div>
     <div class="card" style="padding:0;overflow:auto"><table class="list"><tr><th>Store</th><th>Kind</th><th>Where</th><th>Used by</th><th></th></tr>${ST.stores.map(s => `<tr><td><b>${esc(s.name)}</b>${s.builtin ? '' : `<div class="small faint">Added ${ago(s.at)} by ${esc(s.by || '')}</div>`}</td><td>${esc(s.kindName)}</td><td class="mono small">${esc(s.where)}</td><td class="muted">${s.usedBy.length ? esc(s.usedBy.join(', ')) : 'No app yet'}</td>
       <td class="act">${s.builtin ? '<span class="small faint">On the appliance</span>' : `<button class="icon-btn sm" data-act="store-del" data-id="${s.id}" data-name="${esc(s.name)}" data-tip="Remove" aria-label="Remove">${icon('delete_outline')}</button>`}</td></tr>`).join('')}</table></div>
-    <p class="small muted" style="margin-top:14px">${icon('info_outline')} With several appliances joined together, add each one's database or disk here, or one shared PostgreSQL or S3 bucket for all of them.</p>`;
+    <p class="small muted" style="margin-top:14px">${icon('info_outline')} ${later('add-store') ? 'Adding your own PostgreSQL, S3 bucket or network share comes in a later release.' : 'With several appliances joined together, add each one\'s database or disk here, or one shared PostgreSQL or S3 bucket for all of them.'}</p>`;
 }
 acts['store-new'] = () => { const m = modal({ title: 'Add a data store', body: `<div class="stack"><label class="field"><span>Name</span><input class="input" id="st-n" maxlength="60" placeholder="Company PostgreSQL"></label>
     <label class="field"><span>Kind</span><select class="input" id="st-k">${ST.kinds.map(k => `<option value="${k[0]}">${esc(k[1])}</option>`).join('')}</select></label>

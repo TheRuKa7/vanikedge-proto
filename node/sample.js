@@ -285,7 +285,7 @@ async function seed(x) {
     await person('Neha Iyer', 'neha.iyer@example.com', 'user', ['HR'], 'active'); await person('Imran Khan', 'imran.khan@example.com', 'user', ['Legal']);
     // the app: installed, set up and running
     if (db.app.status === 'not_installed') await call(owner, 'POST', '/api/app/install');
-    const cfg = JSON.parse(JSON.stringify(db.app.config)); cfg.tools = { ...cfg.tools, sites: [...new Set([...(cfg.tools.sites || []), HOST])], signins: [{ host: HOST, kind: 'vault', account: 'buyer@example.com' }] }; cfg.safety = { ...cfg.safety, voice: true }; cfg.web = { on: true, credits: 200 }; // web search is on in the sample, so the question before it is used can be seen
+    const cfg = JSON.parse(JSON.stringify(db.app.config)); cfg.tools = { ...cfg.tools, sites: [...new Set([...(cfg.tools.sites || []), HOST])], signins: [{ host: HOST, kind: 'vault', account: 'buyer@example.com' }] }; cfg.safety = { ...cfg.safety, voice: true }; if (!x.mvp) cfg.web = { on: true, credits: 200 }; // web search comes after the MVP // web search is on in the sample, so the question before it is used can be seen
     await call(owner, 'PUT', '/api/app/config', { config: cfg, note: 'Sample workspace', deploy: db.app.status !== 'running' }); fastDeploy();
     // knowledge
     const col = async (name, description, access, files) => { const c = await call(owner, 'POST', '/api/collections', { name, description, access }); for (const f of files) await call(owner, 'POST', `/api/collections/${c.id}/documents`, { name: f, type: f.split('.').pop(), size: DOC[f].length, pages: [DOC[f]], purpose: 'Sample document' }); return c; };
